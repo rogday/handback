@@ -1,5 +1,5 @@
 # Pinned: the tag says what it is, the digest makes it immutable. Dependabot proposes updates.
-FROM mcr.microsoft.com/devcontainers/base:ubuntu@sha256:0b997af705ff88f10e3293326dce61b4a9676b9f98de6aad67f1973691737dd8
+FROM mcr.microsoft.com/devcontainers/base:ubuntu@sha256:91eff046d5c12318fc98e59258982b87ba896c467427ed8b5dab5a02107a5db7
 
 # What Electron needs to run VS Code headless for the integration tests (npm run test:integration).
 RUN apt-get update \
