@@ -68,9 +68,10 @@ export class FinishReviewPicker {
     picker.onDidAccept(() => {
       const [item] = picker.selectedItems
       if (item === undefined) return
+      const summary = picker.value
       // Closed first: choosing a session opens a quick input of its own, and only one shows at a time.
       picker.hide()
-      void this.#act(item.action, picker.value)
+      void this.#act(item.action, summary)
     })
     picker.onDidHide(() => {
       picker.dispose()
