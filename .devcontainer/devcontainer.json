@@ -2,7 +2,7 @@
   "name": "handback",
   "build": { "dockerfile": "Dockerfile" },
   "features": {
-    "ghcr.io/devcontainers/features/node:1.7.1": { "version": "24" }
+    "ghcr.io/devcontainers/features/node:2.1.1": { "version": "24" }
   },
   "runArgs": ["--memory=16g", "--cpus=8", "--pids-limit=2000", "--security-opt=no-new-privileges", "--cap-drop=ALL"],
   // Every Claude Code session in the container runs the mod straight from the repo and reloads it on save.
