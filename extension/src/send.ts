@@ -55,24 +55,42 @@ async function settle(attempt: Attempt, text: string): Promise<boolean> {
   return reportDelivery(attempt.outcome, text, attempt.session)
 }
 
-/** Asks only when there is a choice: each session by its title and when the person last typed in it. */
+/**
+ * Asks only when there is a choice. Claude Code hands mods a session's title only once the person renamed it, so a
+ * session is told apart by when it started and when it was last messaged.
+ */
 async function pickSession(sessions: readonly SessionRecord[]): Promise<SessionRecord | undefined> {
   if (sessions.length === 1) return sessions[0]
   const now = Date.now()
-  const items = sessions.map(session => ({
-    label: session.title ?? 'Untitled session',
-    description:
-      session.lastPromptAt === undefined
-        ? `started ${timeAgo(session.startedAt, now)}`
-        : `last prompt ${timeAgo(session.lastPromptAt, now)}`,
-    detail: session.root,
-    session,
-  }))
+  const items = sessions.map(session => {
+    const started = `started ${startTime(session.startedAt, now)}`
+    const lastMessage =
+      session.lastPromptAt === undefined ? 'no messages yet' : `last message ${timeAgo(session.lastPromptAt, now)}`
+    return {
+      label: session.title ?? `Session ${started}`,
+      description: session.title === undefined ? lastMessage : `${started} · ${lastMessage}`,
+      detail: session.root,
+      session,
+    }
+  })
   const picked = await vscode.window.showQuickPick(items, {
     title: 'Send the review to which Claude Code session?',
-    placeHolder: 'The session you typed in last comes first',
+    placeHolder: 'The one you messaged last comes first',
   })
   return picked?.session
+}
+
+const clockTime = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+const dayAndClockTime = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+function startTime(time: number, now: number): string {
+  const isToday = new Date(time).toDateString() === new Date(now).toDateString()
+  return (isToday ? clockTime : dayAndClockTime).format(time)
 }
 
 const TIME_UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [

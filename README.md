@@ -46,7 +46,7 @@ Select lines (or put the cursor on one), right-click and choose **Suggest a chan
 
 ### Which Claude Code session gets it
 
-Only sessions whose project holds the commented files are candidates. With one, the review goes straight there. With several, Submit asks which one: each is listed by its title and when you last typed in it, the most recent first, so Enter picks the chat you were just talking to. If no session takes the review, you can copy it and paste it into the chat yourself.
+Only sessions whose project holds the commented files are candidates. With one, the review goes straight there. With several, Submit asks which one: each is listed by when it started and when you last messaged it (and by its title, if you renamed it), the most recent first, so Enter picks the chat you were just talking to. If no session takes the review, you can copy it and paste it into the chat yourself.
 
 ## Settings
 
