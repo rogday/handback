@@ -25,7 +25,9 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+    // As Node's os.homedir() finds it, which is where the extension looks: USERPROFILE, set only on Windows, wins over
+    // a HOME that Git Bash and others set there to a folder of their own.
+    const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     if (home === undefined) {
       $.ui.log(`${$.plugin.name}: neither HOME nor USERPROFILE is set, so reviews cannot find this session.`)
       return started

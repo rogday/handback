@@ -4,7 +4,7 @@ Two programs that never call each other: the VS Code extension writes a finished
 
 ## Protocol
 
-`plugin/hooks/protocol.ts` holds the paths, the shapes and their parsers; both halves import it. Everything lives under `~/.claude/handback/`:
+`plugin/hooks/protocol.ts` holds the paths, the shapes and their parsers; both halves import it. Everything lives under `~/.claude/handback/`, the home folder found the way Node finds it (`USERPROFILE` on Windows, `HOME` elsewhere) on both sides:
 
 ```
 sessions/<session id>.json                 SessionRecord, written by the mod
