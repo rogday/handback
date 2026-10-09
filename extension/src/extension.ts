@@ -2,34 +2,17 @@ import { execFile } from 'node:child_process'
 import { userInfo } from 'node:os'
 import { promisify } from 'node:util'
 import * as vscode from 'vscode'
-import { isDeliveryMode, type DeliveryMode, type SessionRecord } from '../../plugin/hooks/protocol.ts'
-import { deliver, sessionsFor, type DeliveryResult } from './delivery.ts'
 import { FinishReviewPicker } from './finishPicker.ts'
-import {
-  commentedSpan,
-  excerptSpan,
-  formatComment,
-  formatReview,
-  suggestionBlock,
-  type Excerpt,
-  type LineSpan,
-  type ReviewedThread,
-  type Verdict,
-} from './format.ts'
-import { PendingReview, ReviewComment, parseSavedThreads, reviewComments } from './review.ts'
+import { formatComment, formatReview, suggestionBlock, type Verdict } from './format.ts'
+import { PendingReview, ReviewComment, parseSavedThreads } from './review.ts'
+import { send } from './send.ts'
+import { reviewedThread, selectedLines } from './threads.ts'
 
 const CONTROLLER_ID = 'handback'
 const REVIEW_IN_PROGRESS = 'handback.reviewInProgress'
 const PENDING_REVIEW_KEY = 'handback.pendingReview'
 /** Beside the other right-hand items, left of the notifications bell. */
 const FINISH_BUTTON_PRIORITY = 100
-const STATUS_MESSAGE_TIMEOUT_MS = 4_000
-const INSTALL_URL = 'https://github.com/rogday/handback#install'
-/** The Claude Code extension's "Focus input" command. */
-const CLAUDE_FOCUS_INPUT = 'claude-vscode.focus'
-const PASTE_KEY = process.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'
-const COPY_REVIEW = 'Copy review'
-const INSTALL_MOD = 'Install the mod'
 
 const execFileAsync = promisify(execFile)
 
@@ -105,16 +88,6 @@ function wholeFile(document: vscode.TextDocument): vscode.Range[] | undefined {
   return [new vscode.Range(0, 0, document.lineCount - 1, 0)]
 }
 
-/** The selection grown to whole lines, as a comment takes them. */
-function selectedLines(editor: vscode.TextEditor): { range: vscode.Range; lines: string[] } {
-  const { start, end } = editor.selection
-  const span = commentedSpan(start.line, end.line, end.character)
-  const lines: string[] = []
-  for (let line = span.start; line <= span.end; line++) lines.push(editor.document.lineAt(line - 1).text)
-  const lastLineLength = lines.at(-1)?.length ?? 0
-  return { range: new vscode.Range(span.start - 1, 0, span.end - 1, lastLineLength), lines }
-}
-
 function showPendingCount(count: number, finishButton: vscode.StatusBarItem): void {
   void vscode.commands.executeCommand('setContext', REVIEW_IN_PROGRESS, count > 0)
   finishButton.text = `$(comment-discussion) Finish your review (${count})`
@@ -149,124 +122,6 @@ async function discardReview(review: PendingReview): Promise<boolean> {
   const choice = await vscode.window.showWarningMessage(message, { modal: true }, discard)
   if (choice !== discard) return false
   review.clear()
-  return true
-}
-
-async function reviewedThread(thread: vscode.CommentThread): Promise<ReviewedThread> {
-  const { start, end } = thread.range
-  const commented = commentedSpan(start.line, end.line, end.character)
-  // A file deleted since the comment was left (a restored review) is still worth its comments.
-  const document = await Promise.resolve(vscode.workspace.openTextDocument(thread.uri)).catch(() => undefined)
-  return {
-    path: vscode.workspace.asRelativePath(thread.uri, false),
-    languageId: document?.languageId ?? 'plaintext',
-    commented,
-    excerpt: document === undefined ? { firstLine: commented.start, lines: [] } : excerptOf(document, commented),
-    bodies: reviewComments(thread).map(comment => comment.text),
-  }
-}
-
-function excerptOf(document: vscode.TextDocument, commented: LineSpan): Excerpt {
-  const shown = excerptSpan(commented, document.lineCount)
-  const lines: string[] = []
-  for (let line = shown.start; line <= shown.end; line++) lines.push(document.lineAt(line - 1).text)
-  return { firstLine: shown.start, lines }
-}
-
-/** Sends the review to a session the person picks; true once it is out of the editor's hands. */
-async function send(text: string, paths: readonly string[]): Promise<boolean> {
-  const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-  const sessions = await sessionsFor(paths.length > 0 ? paths : workspacePaths)
-  if (sessions.length === 0) {
-    return offerCopy(text, 'No Claude Code session running the Handback mod is open on this workspace.')
-  }
-  const session = await pickSession(sessions)
-  if (session === undefined) return false
-
-  const progress = { location: vscode.ProgressLocation.Window, title: 'Sending the review to Claude' }
-  const result = await vscode.window.withProgress(progress, () => deliver(session.id, text, deliveryMode()))
-  return reportDelivery(result, text, session)
-}
-
-/** Asks only when there is a choice: each session by its title and when the person last typed in it. */
-async function pickSession(sessions: readonly SessionRecord[]): Promise<SessionRecord | undefined> {
-  if (sessions.length === 1) return sessions[0]
-  const now = Date.now()
-  const items = sessions.map(session => ({
-    label: session.title ?? 'Untitled session',
-    description:
-      session.lastPromptAt === undefined
-        ? `started ${timeAgo(session.startedAt, now)}`
-        : `last prompt ${timeAgo(session.lastPromptAt, now)}`,
-    detail: session.root,
-    session,
-  }))
-  const picked = await vscode.window.showQuickPick(items, {
-    title: 'Send the review to which Claude Code session?',
-    placeHolder: 'The session you typed in last comes first',
-  })
-  return picked?.session
-}
-
-const TIME_UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
-  ['day', 86_400_000],
-  ['hour', 3_600_000],
-  ['minute', 60_000],
-]
-const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-
-function timeAgo(time: number, now: number): string {
-  const elapsed = now - time
-  const unit = TIME_UNITS.find(([, unitMs]) => elapsed >= unitMs)
-  if (unit === undefined) return 'just now'
-  const [name, unitMs] = unit
-  return relativeTime.format(-Math.floor(elapsed / unitMs), name)
-}
-
-async function reportDelivery(result: DeliveryResult, text: string, session: SessionRecord): Promise<boolean> {
-  switch (result) {
-    case 'submitted':
-      vscode.window.setStatusBarMessage('$(check) Review sent to Claude', STATUS_MESSAGE_TIMEOUT_MS)
-      return true
-    case 'filled':
-      vscode.window.setStatusBarMessage('$(check) Review is in the Claude Code prompt box', STATUS_MESSAGE_TIMEOUT_MS)
-      return true
-    case 'noPromptBox':
-      await handToClaudeChat(text)
-      return true
-    case 'dropped':
-      void vscode.window.showErrorMessage(
-        'The Claude Code mod could not read the review: update the extension and the mod to the same version.',
-      )
-      return false
-    case 'timedOut':
-      return offerCopy(text, `Claude Code session "${session.title ?? session.id}" did not take the review.`)
-  }
-}
-
-/**
- * The VS Code chat draws its own prompt box, which nothing but a paste can fill. The person pastes: a paste command
- * run while the focus missed the chat would land in their code.
- */
-async function handToClaudeChat(text: string): Promise<void> {
-  await vscode.env.clipboard.writeText(text)
-  await Promise.resolve(vscode.commands.executeCommand(CLAUDE_FOCUS_INPUT)).catch(() => undefined)
-  void vscode.window.showInformationMessage(
-    `The review is on your clipboard: press ${PASTE_KEY} in Claude Code to add it.`,
-  )
-}
-
-function deliveryMode(): DeliveryMode {
-  const mode = vscode.workspace.getConfiguration('handback').get<unknown>('delivery')
-  return isDeliveryMode(mode) ? mode : 'send'
-}
-
-async function offerCopy(text: string, problem: string): Promise<boolean> {
-  const choice = await vscode.window.showWarningMessage(problem, COPY_REVIEW, INSTALL_MOD)
-  if (choice === INSTALL_MOD) void vscode.env.openExternal(vscode.Uri.parse(INSTALL_URL))
-  if (choice !== COPY_REVIEW) return false
-  await vscode.env.clipboard.writeText(text)
-  vscode.window.setStatusBarMessage('$(check) Review copied: paste it into Claude Code', STATUS_MESSAGE_TIMEOUT_MS)
   return true
 }
 
