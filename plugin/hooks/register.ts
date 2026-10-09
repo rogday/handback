@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 import {
   HEARTBEAT_INTERVAL_MS,
   INBOX_POLL_INTERVAL_MS,
+  PROTOCOL_VERSION,
   deliveredFileName,
   parseReviewDelivery,
   parseSessionRecord,
@@ -39,7 +40,10 @@ export const register: Register = on => {
     const startedAt = await $.clock.now()
     announcement = {
       home,
-      record: { ...(previous ?? { id: sessionId, root: '', startedAt, heartbeatAt: startedAt }), endedAt: undefined },
+      record: {
+        ...(previous ?? { id: sessionId, protocol: PROTOCOL_VERSION, root: '', startedAt, heartbeatAt: startedAt }),
+        endedAt: undefined,
+      },
     }
 
     const heartbeat = async (current: Announcement) => {
@@ -121,8 +125,8 @@ function beat(record: SessionRecord, sessionId: string, root: string, now: numbe
   // After a /clear the process goes on under a new session id.
   const isSameSession = sessionId === record.id
   return isSameSession
-    ? { ...record, root, heartbeatAt: now }
-    : { id: sessionId, root, startedAt: now, heartbeatAt: now }
+    ? { ...record, protocol: PROTOCOL_VERSION, root, heartbeatAt: now }
+    : { id: sessionId, protocol: PROTOCOL_VERSION, root, startedAt: now, heartbeatAt: now }
 }
 
 /** The reviews not yet delivered, oldest first: review ids sort by the time they were made. */

@@ -1,7 +1,7 @@
 // Hands a finished review to the Claude Code session the person picks, and tells them how it went.
 
 import * as vscode from 'vscode'
-import { isDeliveryMode, type DeliveryMode, type SessionRecord } from '../../plugin/hooks/protocol.ts'
+import { PROTOCOL_VERSION, isDeliveryMode, type DeliveryMode, type SessionRecord } from '../../plugin/hooks/protocol.ts'
 import { deliver, sessionsFor, type DeliveryResult } from './delivery.ts'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 4_000
@@ -17,7 +17,11 @@ const INSTALL_MOD = 'Install the mod'
 let isSending = false
 
 /** How far a send got before anything more is asked of the person. */
-type Attempt = { outcome: 'noSession' } | { outcome: 'notPicked' } | { outcome: DeliveryResult; session: SessionRecord }
+type Attempt =
+  | { outcome: 'noSession' }
+  | { outcome: 'otherProtocol'; isModOlder: boolean }
+  | { outcome: 'notPicked' }
+  | { outcome: DeliveryResult; session: SessionRecord }
 
 /** Sends the review to a session the person picks; true once it is out of the editor's hands. */
 export async function send(text: string, paths: readonly string[]): Promise<boolean> {
@@ -37,7 +41,12 @@ export async function send(text: string, paths: readonly string[]): Promise<bool
 
 async function attemptDelivery(text: string, paths: readonly string[]): Promise<Attempt> {
   const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-  const sessions = await sessionsFor(paths.length > 0 ? paths : workspacePaths)
+  const candidates = await sessionsFor(paths.length > 0 ? paths : workspacePaths)
+  const sessions = candidates.filter(session => session.protocol === PROTOCOL_VERSION)
+  const [other] = candidates.filter(session => session.protocol !== PROTOCOL_VERSION)
+  if (sessions.length === 0 && other !== undefined) {
+    return { outcome: 'otherProtocol', isModOlder: other.protocol < PROTOCOL_VERSION }
+  }
   if (sessions.length === 0) return { outcome: 'noSession' }
   const session = await pickSession(sessions)
   if (session === undefined) return { outcome: 'notPicked' }
@@ -50,6 +59,12 @@ async function attemptDelivery(text: string, paths: readonly string[]): Promise<
 async function settle(attempt: Attempt, text: string): Promise<boolean> {
   if (attempt.outcome === 'noSession') {
     return offerCopy(text, 'No Claude Code session running the Handback mod is open on this workspace.')
+  }
+  if (attempt.outcome === 'otherProtocol') {
+    const update = attempt.isModOlder
+      ? 'runs an older Handback mod: update it with `claude plugin update handback`'
+      : 'runs a newer Handback mod than this extension: update the extension'
+    return offerCopy(text, `The Claude Code session on this workspace ${update}.`)
   }
   if (attempt.outcome === 'notPicked') return false
   return reportDelivery(attempt.outcome, text, attempt.session)

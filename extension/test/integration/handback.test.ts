@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import * as vscode from 'vscode'
 import {
+  PROTOCOL_VERSION,
   deliveredFileName,
   reviewFileName,
   reviewIdOf,
@@ -148,7 +149,8 @@ function workspaceRoot(): vscode.Uri {
 /** Announces a live session on the workspace, as the mod does. */
 async function announce(id: string, lastPromptAt: number): Promise<void> {
   const now = Date.now()
-  const record: SessionRecord = { id, root: workspaceRoot().fsPath, startedAt: now, heartbeatAt: now, lastPromptAt }
+  const root = workspaceRoot().fsPath
+  const record: SessionRecord = { id, protocol: PROTOCOL_VERSION, root, startedAt: now, heartbeatAt: now, lastPromptAt }
   await mkdir(sessionsDir(homedir()), { recursive: true })
   await writeFile(`${sessionsDir(homedir())}/${sessionFileName(id)}`, JSON.stringify(record))
 }

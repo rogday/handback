@@ -10,6 +10,14 @@ const REVIEW_SUFFIX = '.json'
 /** Beside a review, holding its DeliveryOutcome: the mod took it, and the extension may delete both. */
 const DELIVERED_SUFFIX = '.delivered'
 
+/**
+ * Raised with any change to these paths or shapes. The extension updates itself from the Marketplace and the mod only
+ * with `claude plugin update`, so each session's record says which protocol its mod speaks.
+ */
+export const PROTOCOL_VERSION = 1
+/** What a record from a mod older than the version field says. */
+const UNVERSIONED = 0
+
 export const HEARTBEAT_INTERVAL_MS = 5_000
 /** Three missed heartbeats and the session is taken for gone. */
 export const SESSION_STALE_AFTER_MS = 3 * HEARTBEAT_INTERVAL_MS
@@ -18,6 +26,8 @@ export const INBOX_POLL_INTERVAL_MS = 1_000
 /** A running Claude Code session the mod announced, at `sessionsDir/<id>.json`. */
 export type SessionRecord = {
   id: string
+  /** The PROTOCOL_VERSION of the mod that wrote it. */
+  protocol: number
   /** The session's project root, absolute. */
   root: string
   /** The session's title as Claude Code shows it, once it has one. */
@@ -91,7 +101,9 @@ export function parseSessionRecord(text: string): SessionRecord | undefined {
     typeof value.root === 'string' &&
     typeof value.startedAt === 'number' &&
     typeof value.heartbeatAt === 'number'
-  return isRecord ? (value as SessionRecord) : undefined
+  if (!isRecord) return undefined
+  const protocol = typeof value.protocol === 'number' ? value.protocol : UNVERSIONED
+  return { ...(value as SessionRecord), protocol }
 }
 
 export function parseReviewDelivery(text: string): ReviewDelivery | undefined {

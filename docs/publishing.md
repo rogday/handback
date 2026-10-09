@@ -1,6 +1,6 @@
 # Publishing
 
-The extension and the mod share a file protocol with no compatibility promises yet, so they are released together under one version: bump `extension/package.json` and `plugin/.claude-plugin/plugin.json` in the same commit, and add the release to `CHANGELOG.md`.
+The extension and the mod share a file protocol with no compatibility promises yet, so they are released together under one version: bump `extension/package.json` and `plugin/.claude-plugin/plugin.json` in the same commit, and add the release to `CHANGELOG.md`. A release that changes the protocol raises `PROTOCOL_VERSION` in `plugin/hooks/protocol.ts`: people update the two halves at different times, and the extension then tells them which one is behind.
 
 ## The repository
 

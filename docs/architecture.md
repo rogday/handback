@@ -12,6 +12,7 @@ inbox/<session id>/<review id>.json        ReviewDelivery, written by the extens
 inbox/<session id>/<review id>.delivered   DeliveryOutcome, written by the mod once it took the review
 ```
 
+- **Versions.** `PROTOCOL_VERSION` rises with any change to these paths or shapes. The extension updates itself from the Marketplace while the mod updates only with `claude plugin update`, so each session record carries the version its mod speaks (a record without one reads as 0). The extension sends only to sessions on its own version, and when every candidate speaks another one it names the side to update instead.
 - **Sessions.** Each session running the mod keeps its record fresh: a heartbeat every `HEARTBEAT_INTERVAL_MS`, the title and the time of the person's last prompt on each prompt, `endedAt` when it ends. A session whose heartbeat is older than `SESSION_STALE_AFTER_MS` is gone. After a `/clear` the process goes on under a new session id, and the next heartbeat announces it.
 - **Reviews.** The extension formats the whole review into the prompt text and writes it into the chosen session's inbox. Review ids sort by creation time, so a session delivers its reviews in the order they were finished.
 - **Delivery.** The mod polls its inbox every `INBOX_POLL_INTERVAL_MS` and handles each review by its `mode`, writing what it did into the `.delivered` marker:
