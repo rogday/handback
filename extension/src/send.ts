@@ -12,19 +12,47 @@ const PASTE_KEY = process.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'
 const COPY_REVIEW = 'Copy review'
 const INSTALL_MOD = 'Install the mod'
 
+// Set while a review is on its way, so pressing Finish again then cannot send it twice. Released before anything
+// waits on the person: VS Code keeps an unanswered notification pending, which would hold every later send.
+let isSending = false
+
+/** How far a send got before anything more is asked of the person. */
+type Attempt = { outcome: 'noSession' } | { outcome: 'notPicked' } | { outcome: DeliveryResult; session: SessionRecord }
+
 /** Sends the review to a session the person picks; true once it is out of the editor's hands. */
 export async function send(text: string, paths: readonly string[]): Promise<boolean> {
+  if (isSending) {
+    void vscode.window.showInformationMessage('A review is already on its way to Claude.')
+    return false
+  }
+  isSending = true
+  let attempt: Attempt
+  try {
+    attempt = await attemptDelivery(text, paths)
+  } finally {
+    isSending = false
+  }
+  return settle(attempt, text)
+}
+
+async function attemptDelivery(text: string, paths: readonly string[]): Promise<Attempt> {
   const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
   const sessions = await sessionsFor(paths.length > 0 ? paths : workspacePaths)
-  if (sessions.length === 0) {
-    return offerCopy(text, 'No Claude Code session running the Handback mod is open on this workspace.')
-  }
+  if (sessions.length === 0) return { outcome: 'noSession' }
   const session = await pickSession(sessions)
-  if (session === undefined) return false
+  if (session === undefined) return { outcome: 'notPicked' }
 
   const progress = { location: vscode.ProgressLocation.Window, title: 'Sending the review to Claude' }
   const result = await vscode.window.withProgress(progress, () => deliver(session.id, text, deliveryMode()))
-  return reportDelivery(result, text, session)
+  return { outcome: result, session }
+}
+
+async function settle(attempt: Attempt, text: string): Promise<boolean> {
+  if (attempt.outcome === 'noSession') {
+    return offerCopy(text, 'No Claude Code session running the Handback mod is open on this workspace.')
+  }
+  if (attempt.outcome === 'notPicked') return false
+  return reportDelivery(attempt.outcome, text, attempt.session)
 }
 
 /** Asks only when there is a choice: each session by its title and when the person last typed in it. */

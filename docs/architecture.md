@@ -29,7 +29,7 @@ Bundled by esbuild into `dist/extension.js`; runs in the workspace's extension h
 - `delivery.ts`: the extension's side of the protocol. It offers the live sessions whose root holds every commented file, the one the person prompted last first, and deletes the records and inboxes of gone sessions.
 - `finishPicker.ts`: GitHub's "Finish your review" box, as VS Code's quick input at the top of the window: the input is the summary (every item stays shown whatever is typed), the items are the verdicts, last used first, and Discard pending review. Closing the box keeps the summary typed so far. It hides before it acts, since choosing a session opens a quick input of its own.
 - `threads.ts`: VS Code's comment threads and selections turned into what `format.ts` quotes: the commented lines, their excerpt from the document, the comments.
-- `send.ts`: the way out. Picks the session (asking only when several hold the files), delivers through `delivery.ts`, and reports the outcome; when no session takes the review it offers to copy the prompt to the clipboard.
+- `send.ts`: the way out. Picks the session (asking only when several hold the files), delivers through `delivery.ts`, and reports the outcome; when no session takes the review it offers to copy the prompt to the clipboard. One review is on its way at a time, so pressing Finish twice cannot send it twice; the guard is released before any notification waits on the person.
 - `extension.ts`: activation, the commands and menus, the "Finish your review" status bar button.
 
 ## Mod (`plugin/`)

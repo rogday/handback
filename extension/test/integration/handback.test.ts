@@ -9,6 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import * as vscode from 'vscode'
 import {
   deliveredFileName,
+  reviewFileName,
   reviewIdOf,
   sessionFileName,
   sessionInboxDir,
@@ -96,6 +97,24 @@ test('in fill mode a chat that draws its own prompt box gets the review on the c
   }
 })
 
+test('a second review sent while one is on its way is held back, not sent twice', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const held = await reply('Sent while the first is on its way.')
+
+  const first = vscode.commands.executeCommand('handback.addSingleComment', await reply('The first.'))
+  const review = await nextReview('only')
+  await vscode.commands.executeCommand('handback.addSingleComment', held)
+  await answer('only', review.id, 'submitted')
+  await first
+
+  assert.match(review.text, /The first\./)
+  // Held back, the comment stays pending; dropped here so the tests after this one start from an empty review.
+  const [pending] = held.thread.comments
+  assert.ok(pending, 'the held comment stays in the review')
+  await vscode.commands.executeCommand('handback.deleteComment', pending)
+})
+
 async function forgetEverything(): Promise<void> {
   await rm(join(homedir(), '.claude'), { recursive: true, force: true })
 }
@@ -123,19 +142,35 @@ async function reply(text: string): Promise<vscode.CommentReply> {
   return { thread, text }
 }
 
-/** Plays the mod for one session: takes the first review sent there, answers `outcome` and resolves its text. */
+/**
+ * Plays the mod for one session: takes the first review sent there, answers `outcome` and resolves its text once
+ * the extension has cleaned up after it, so a test never ends with a delivery still under way.
+ */
 async function playMod(sessionId: string, outcome: DeliveryOutcome): Promise<string> {
+  const review = await nextReview(sessionId)
+  await answer(sessionId, review.id, outcome)
+  return review.text
+}
+
+/** Waits for a review to arrive in the session's inbox, without answering it. */
+async function nextReview(sessionId: string): Promise<{ id: string; text: string }> {
   const inbox = sessionInboxDir(homedir(), sessionId)
   for (;;) {
     const names = await readdir(inbox).catch(() => [])
-    const reviewId = names.map(reviewIdOf).find(id => id !== undefined)
-    if (reviewId !== undefined) {
-      const { text } = JSON.parse(await readFile(join(inbox, `${reviewId}.json`), 'utf8')) as { text: string }
-      await writeFile(join(inbox, deliveredFileName(reviewId)), outcome)
-      return text
+    const id = names.map(reviewIdOf).find(reviewId => reviewId !== undefined)
+    if (id !== undefined) {
+      const { text } = JSON.parse(await readFile(join(inbox, reviewFileName(id)), 'utf8')) as { text: string }
+      return { id, text }
     }
     await sleep(MOD_POLL_MS)
   }
+}
+
+/** Answers a review as the mod does, then waits until the extension has read the answer and removed both files. */
+async function answer(sessionId: string, reviewId: string, outcome: DeliveryOutcome): Promise<void> {
+  const inbox = sessionInboxDir(homedir(), sessionId)
+  await writeFile(join(inbox, deliveredFileName(reviewId)), outcome)
+  while ((await readdir(inbox).catch(() => [])).length > 0) await sleep(MOD_POLL_MS)
 }
 
 async function pressEnterOnQuickPickUntil(done: Promise<unknown>): Promise<void> {
