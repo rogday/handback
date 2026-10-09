@@ -5,6 +5,8 @@ const CONTEXT_LINES = 3
 const MIN_FENCE_LENGTH = 3
 const SUGGESTION_FENCE = /^`{3,}suggestion\s*$/m
 const SUGGESTION_NOTE = 'A `suggestion` block is the replacement for the lines its comment is on, as on GitHub.'
+const CHANGED_ON_DISK_NOTE =
+  '_The file on disk no longer reads like this here (unsaved edits, or changed since the comment): the lines are quoted as they were commented._'
 
 export type Verdict = 'comment' | 'approve' | 'requestChanges'
 
@@ -19,14 +21,20 @@ export type Excerpt = {
   lines: readonly string[]
 }
 
-export type ReviewedThread = {
-  /** Relative to the workspace. */
-  path: string
+/** The commented code as it was when the comment was written: what the review quotes, whatever happened since. */
+export type Snapshot = {
   languageId: string
   commented: LineSpan
   excerpt: Excerpt
+}
+
+export type ReviewedThread = Snapshot & {
+  /** Relative to the workspace. */
+  path: string
   /** The thread's comments, oldest first. */
   bodies: readonly string[]
+  /** The file on disk, which Claude reads, no longer holds the commented lines where they were. */
+  isChangedOnDisk: boolean
 }
 
 export type Review = {
@@ -54,6 +62,15 @@ const INSTRUCTIONS: Record<Verdict, string> = {
 export function commentedSpan(startLine: number, endLine: number, endCharacter: number): LineSpan {
   const isEndAtLineStart = endCharacter === 0 && endLine > startLine
   return { start: startLine + 1, end: (isEndAtLineStart ? endLine - 1 : endLine) + 1 }
+}
+
+/** Whether the file's lines, as read now, still hold the snapshot's commented lines at the same place. */
+export function isCommentedCodeIntact(snapshot: Snapshot, fileLines: readonly string[]): boolean {
+  const { commented, excerpt } = snapshot
+  for (let line = commented.start; line <= commented.end; line++) {
+    if (fileLines[line - 1] !== excerpt.lines[line - excerpt.firstLine]) return false
+  }
+  return true
 }
 
 /** The lines to quote for a comment: the commented ones and their context, within the file. */
@@ -96,8 +113,8 @@ function instructions(verdict: Verdict, threads: readonly ReviewedThread[]): str
 function formatThread(thread: ReviewedThread): string {
   const { start, end } = thread.commented
   const lines = start === end ? `line ${start}` : `lines ${start}–${end}`
-  const excerpt = thread.excerpt.lines.length > 0 ? [formatExcerpt(thread)] : []
-  return [`**${thread.path}** ${lines}`, ...excerpt, ...thread.bodies].join('\n\n')
+  const note = thread.isChangedOnDisk ? [CHANGED_ON_DISK_NOTE] : []
+  return [`**${thread.path}** ${lines}`, ...note, formatExcerpt(thread), ...thread.bodies].join('\n\n')
 }
 
 function formatExcerpt({ languageId, commented, excerpt }: ReviewedThread): string {

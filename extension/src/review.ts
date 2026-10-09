@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import type { Snapshot } from './format.ts'
 
 /** The `comment` and `commentThread` context values menus match on. */
 const PENDING = 'pending'
@@ -71,29 +72,53 @@ export type SavedThread = {
   uri: string
   range: [startLine: number, startCharacter: number, endLine: number, endCharacter: number]
   comments: { text: string; time: number }[]
+  snapshot: Snapshot
+}
+
+/** A thread of the review and the code it was written on. */
+export type ReviewEntry = {
+  thread: vscode.CommentThread
+  snapshot: Snapshot
 }
 
 /** The threads of the review being written, like a pull request's pending review. */
 export class PendingReview implements vscode.Disposable {
-  readonly #threads = new Set<vscode.CommentThread>()
+  // Each thread with the code as it was when its first comment was written.
+  readonly #snapshots = new Map<vscode.CommentThread, Snapshot>()
   readonly #changed = new vscode.EventEmitter<void>()
   readonly onDidChange = this.#changed.event
 
   get threads(): readonly vscode.CommentThread[] {
-    return [...this.#threads]
+    return [...this.#snapshots.keys()]
+  }
+
+  get entries(): readonly ReviewEntry[] {
+    return [...this.#snapshots].map(([thread, snapshot]) => ({ thread, snapshot }))
+  }
+
+  entryOf(thread: vscode.CommentThread): ReviewEntry | undefined {
+    const snapshot = this.#snapshots.get(thread)
+    return snapshot === undefined ? undefined : { thread, snapshot }
   }
 
   get commentCount(): number {
     return this.threads.reduce((count, thread) => count + reviewComments(thread).length, 0)
   }
 
-  /** Adds the reply to the review; the thread it went to, or undefined for an empty reply. */
-  addComment(reply: vscode.CommentReply, author: vscode.CommentAuthorInformation): vscode.CommentThread | undefined {
+  /**
+   * Adds the reply to the review; the thread it went to, or undefined for an empty reply. `snapshot` is the code it
+   * is on, kept when the reply starts a thread.
+   */
+  addComment(
+    reply: vscode.CommentReply,
+    author: vscode.CommentAuthorInformation,
+    snapshot: Snapshot,
+  ): vscode.CommentThread | undefined {
     const text = reply.text.trim()
     if (text === '') return undefined
     const { thread } = reply
     thread.comments = [...thread.comments, new ReviewComment(thread, author, text, new Date())]
-    this.#adopt(thread)
+    this.#adopt(thread, snapshot)
     this.#changed.fire()
     return thread
   }
@@ -114,7 +139,7 @@ export class PendingReview implements vscode.Disposable {
   }
 
   /** Makes a draft a pending comment of the review; undefined when it was left empty and so dropped. */
-  addDraft(comment: ReviewComment): vscode.CommentThread | undefined {
+  addDraft(comment: ReviewComment, snapshot: Snapshot): vscode.CommentThread | undefined {
     const { thread } = comment
     if (comment.text.trim() === '') {
       thread.dispose()
@@ -122,7 +147,7 @@ export class PendingReview implements vscode.Disposable {
     }
     comment.publish()
     redraw(thread)
-    this.#adopt(thread)
+    this.#adopt(thread, snapshot)
     this.#changed.fire()
     return thread
   }
@@ -132,21 +157,20 @@ export class PendingReview implements vscode.Disposable {
     saved: readonly SavedThread[],
     author: vscode.CommentAuthorInformation,
   ): void {
-    for (const { uri, range, comments } of saved) {
+    for (const { uri, range, comments, snapshot } of saved) {
       const thread = controller.createCommentThread(vscode.Uri.parse(uri), new vscode.Range(...range), [])
       thread.comments = comments.map(({ text, time }) => new ReviewComment(thread, author, text, new Date(time)))
-      this.#adopt(thread)
+      this.#adopt(thread, snapshot)
     }
     this.#changed.fire()
   }
 
   toSaved(): SavedThread[] {
-    return this.threads.map(({ uri, range, comments }) => ({
+    return this.entries.map(({ thread: { uri, range }, thread, snapshot }) => ({
       uri: uri.toString(),
       range: [range.start.line, range.start.character, range.end.line, range.end.character],
-      comments: comments
-        .filter(comment => comment instanceof ReviewComment)
-        .map(comment => ({ text: comment.text, time: comment.timestamp.getTime() })),
+      comments: reviewComments(thread).map(comment => ({ text: comment.text, time: comment.timestamp.getTime() })),
+      snapshot,
     }))
   }
 
@@ -172,7 +196,7 @@ export class PendingReview implements vscode.Disposable {
     if (remaining.length > 0) {
       thread.comments = remaining
     } else {
-      this.#threads.delete(thread)
+      this.#snapshots.delete(thread)
       thread.dispose()
     }
     this.#changed.fire()
@@ -180,29 +204,29 @@ export class PendingReview implements vscode.Disposable {
 
   /** Drops a thread that was sent on its own. */
   removeThread(thread: vscode.CommentThread): void {
-    this.#threads.delete(thread)
+    this.#snapshots.delete(thread)
     thread.dispose()
     this.#changed.fire()
   }
 
   /** Drops every thread: once the review is sent, or when it is discarded. */
   clear(): void {
-    for (const thread of this.#threads) thread.dispose()
-    this.#threads.clear()
+    for (const thread of this.#snapshots.keys()) thread.dispose()
+    this.#snapshots.clear()
     this.#changed.fire()
   }
 
   // Disposes the threads without dropping them from the saved review: VS Code is shutting down or reloading.
   dispose(): void {
-    for (const thread of this.#threads) thread.dispose()
+    for (const thread of this.#snapshots.keys()) thread.dispose()
     this.#changed.dispose()
   }
 
-  #adopt(thread: vscode.CommentThread): void {
+  #adopt(thread: vscode.CommentThread, snapshot: Snapshot): void {
     thread.contextValue = PENDING
     thread.canReply = true
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded
-    this.#threads.add(thread)
+    if (!this.#snapshots.has(thread)) this.#snapshots.set(thread, snapshot)
   }
 }
 
@@ -220,8 +244,27 @@ function isSavedThread(value: unknown): value is SavedThread {
     range.length === 4 &&
     range.every(position => typeof position === 'number') &&
     Array.isArray(comments) &&
-    comments.every(isSavedComment)
+    comments.every(isSavedComment) &&
+    isSnapshot((value as Record<string, unknown>).snapshot)
   )
+}
+
+function isSnapshot(value: unknown): value is Snapshot {
+  if (typeof value !== 'object' || value === null) return false
+  const { languageId, commented, excerpt } = value as Record<string, unknown>
+  return typeof languageId === 'string' && isLineSpan(commented) && isExcerpt(excerpt)
+}
+
+function isLineSpan(value: unknown): value is Snapshot['commented'] {
+  if (typeof value !== 'object' || value === null) return false
+  const { start, end } = value as Record<string, unknown>
+  return typeof start === 'number' && typeof end === 'number'
+}
+
+function isExcerpt(value: unknown): value is Snapshot['excerpt'] {
+  if (typeof value !== 'object' || value === null) return false
+  const { firstLine, lines } = value as Record<string, unknown>
+  return typeof firstLine === 'number' && Array.isArray(lines) && lines.every(line => typeof line === 'string')
 }
 
 function isSavedComment(value: unknown): value is SavedThread['comments'][number] {

@@ -6,7 +6,7 @@ import { FinishReviewPicker } from './finishPicker.ts'
 import { formatComment, formatReview, suggestionBlock, type Verdict } from './format.ts'
 import { PendingReview, ReviewComment, parseSavedThreads } from './review.ts'
 import { send } from './send.ts'
-import { reviewedThread, selectedLines } from './threads.ts'
+import { reviewedThreads, selectedLines, snapshotOf } from './threads.ts'
 
 const CONTROLLER_ID = 'handback'
 const REVIEW_IN_PROGRESS = 'handback.reviewInProgress'
@@ -38,10 +38,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const saved = parseSavedThreads(context.workspaceState.get<unknown>(PENDING_REVIEW_KEY))
   if (saved.length > 0) void author.then(reviewerInfo => review.restore(controller, saved, reviewerInfo))
   const addReviewComment = async (reply: vscode.CommentReply) => {
-    review.addComment(reply, await author)
+    review.addComment(reply, await author, await snapshotOf(reply.thread))
   }
   const addSingleComment = async (reply: vscode.CommentReply) => {
-    const thread = review.addComment(reply, await author)
+    const thread = review.addComment(reply, await author, await snapshotOf(reply.thread))
     if (thread !== undefined) await sendSingleComment(review, thread)
   }
   const suggestChange = async () => {
@@ -50,8 +50,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const { range, lines } = selectedLines(editor)
     review.startDraft(controller, editor.document.uri, range, suggestionBlock(lines), await author)
   }
+  const addDraft = async (comment: ReviewComment) => {
+    review.addDraft(comment, await snapshotOf(comment.thread))
+  }
   const sendDraft = async (comment: ReviewComment) => {
-    const thread = review.addDraft(comment)
+    const thread = review.addDraft(comment, await snapshotOf(comment.thread))
     if (thread !== undefined) await sendSingleComment(review, thread)
   }
 
@@ -70,12 +73,8 @@ export function activate(context: vscode.ExtensionContext): void {
       review.deleteComment(comment),
     ),
     vscode.commands.registerCommand('handback.suggestChange', suggestChange),
-    vscode.commands.registerCommand('handback.startReviewWithDraft', (comment: ReviewComment) => {
-      review.addDraft(comment)
-    }),
-    vscode.commands.registerCommand('handback.addDraftToReview', (comment: ReviewComment) => {
-      review.addDraft(comment)
-    }),
+    vscode.commands.registerCommand('handback.startReviewWithDraft', addDraft),
+    vscode.commands.registerCommand('handback.addDraftToReview', addDraft),
     vscode.commands.registerCommand('handback.sendDraft', sendDraft),
     vscode.commands.registerCommand('handback.discardDraft', (comment: ReviewComment) => comment.thread.dispose()),
     vscode.commands.registerCommand('handback.finishReview', () => picker.show(review.commentCount)),
@@ -102,7 +101,7 @@ async function finishReview(review: PendingReview, verdict: Verdict, summary: st
     void vscode.window.showInformationMessage('Nothing to send: leave a comment on a line or a summary first.')
     return false
   }
-  const threads = await Promise.all(review.threads.map(reviewedThread))
+  const threads = await reviewedThreads(review.entries)
   const paths = review.threads.map(thread => thread.uri.fsPath)
   const isSent = await send(formatReview({ verdict, summary, threads }), paths)
   if (isSent) review.clear()
@@ -111,7 +110,11 @@ async function finishReview(review: PendingReview, verdict: Verdict, summary: st
 
 /** Sends one thread at once; if it cannot be sent, it stays in the review as a pending comment. */
 async function sendSingleComment(review: PendingReview, thread: vscode.CommentThread): Promise<void> {
-  const isSent = await send(formatComment(await reviewedThread(thread)), [thread.uri.fsPath])
+  const entry = review.entryOf(thread)
+  if (entry === undefined) return
+  const [reviewed] = await reviewedThreads([entry])
+  if (reviewed === undefined) return
+  const isSent = await send(formatComment(reviewed), [thread.uri.fsPath])
   if (isSent) review.removeThread(thread)
 }
 

@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { commentedSpan, excerptSpan, formatReview, suggestionBlock, type ReviewedThread } from './format.ts'
+import {
+  commentedSpan,
+  excerptSpan,
+  formatReview,
+  isCommentedCodeIntact,
+  suggestionBlock,
+  type ReviewedThread,
+} from './format.ts'
 
 test('a selection of whole lines does not take the line after it', () => {
   assert.deepEqual(commentedSpan(4, 7, 0), { start: 5, end: 7 })
@@ -41,7 +48,30 @@ test('Claude learns what a suggestion block means only when the review holds one
   assert.doesNotMatch(formatReview({ verdict: 'comment', summary: '', threads: [plain] }), /`suggestion` block is/)
 })
 
+test('the commented code counts as intact only where the file still has it, at the same lines', () => {
+  const snapshot = {
+    languageId: 'typescript',
+    commented: { start: 2, end: 3 },
+    excerpt: { firstLine: 1, lines: ['a', 'b', 'c', 'd'] },
+  }
+
+  assert.equal(isCommentedCodeIntact(snapshot, ['a', 'b', 'c', 'd']), true)
+  assert.equal(isCommentedCodeIntact(snapshot, ['A', 'b', 'c', 'D']), true, 'context lines may change')
+  assert.equal(isCommentedCodeIntact(snapshot, ['a', 'b', 'C', 'd']), false)
+  assert.equal(isCommentedCodeIntact(snapshot, ['new', 'a', 'b', 'c', 'd']), false, 'moved down')
+  assert.equal(isCommentedCodeIntact(snapshot, []), false, 'the file is gone')
+})
+
+test('Claude is told when the file on disk no longer holds the commented code', () => {
+  const changed = { ...thread('a.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Why?'), isChangedOnDisk: true }
+  const intact = thread('a.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Why?')
+
+  assert.match(formatReview({ verdict: 'comment', summary: '', threads: [changed] }), /file on disk no longer/)
+  assert.doesNotMatch(formatReview({ verdict: 'comment', summary: '', threads: [intact] }), /file on disk no longer/)
+})
+
 function thread(path: string, commented: ReviewedThread['commented'], lines: string[], body: string): ReviewedThread {
   const languageId = path.endsWith('.md') ? 'markdown' : 'typescript'
-  return { path, languageId, commented, excerpt: { firstLine: commented.start - 1 || 1, lines }, bodies: [body] }
+  const excerpt = { firstLine: commented.start - 1 || 1, lines }
+  return { path, languageId, commented, excerpt, bodies: [body], isChangedOnDisk: false }
 }

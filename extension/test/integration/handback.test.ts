@@ -67,6 +67,26 @@ test('a review started on a line and finished in the box reaches the session as 
   assert.match(review, /Name this after what it holds\./)
 })
 
+test('a comment quotes the code as it was written on, and says so once the file on disk changed', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const sample = vscode.Uri.joinPath(workspaceRoot(), SAMPLE)
+  const original = await readFile(sample.fsPath, 'utf8')
+  const mod = playMod('only', 'submitted')
+  try {
+    await vscode.commands.executeCommand('handback.startReview', await reply('Why start at zero?'))
+    await writeFile(sample.fsPath, original.replace('let sum = 0', 'let sum = prices.length'))
+    await vscode.commands.executeCommand('handback.finishReview')
+    await pressEnterOnQuickPickUntil(mod)
+
+    const review = await mod
+    assert.match(review, /2 > {3}let sum = 0/)
+    assert.match(review, /file on disk no longer/)
+  } finally {
+    await writeFile(sample.fsPath, original)
+  }
+})
+
 test('with several sessions the picker offers the one prompted last first', async () => {
   await forgetEverything()
   await announce('earlier', Date.now() - 60_000)
