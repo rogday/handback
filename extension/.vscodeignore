@@ -1,6 +1,5 @@
 **
 !dist/extension.js
-!dist/webview/**
 !icon.png
 !LICENSE
 !README.md

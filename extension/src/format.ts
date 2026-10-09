@@ -6,13 +6,7 @@ const MIN_FENCE_LENGTH = 3
 const SUGGESTION_FENCE = /^`{3,}suggestion\s*$/m
 const SUGGESTION_NOTE = 'A `suggestion` block is the replacement for the lines its comment is on, as on GitHub.'
 
-const VERDICTS = ['comment', 'approve', 'requestChanges'] as const
-
-export type Verdict = (typeof VERDICTS)[number]
-
-export function isVerdict(value: unknown): value is Verdict {
-  return VERDICTS.some(verdict => verdict === value)
-}
+export type Verdict = 'comment' | 'approve' | 'requestChanges'
 
 /** 1-based, inclusive. */
 export type LineSpan = {

@@ -21,7 +21,7 @@ The mod is a Claude Code function-hooks plugin, built against Claude Code 2.1.29
 
 It comes in two halves:
 
-- **The VS Code extension** draws the review: comment threads in the gutter, pending comments, the "Finish your review" dialog.
+- **The VS Code extension** draws the review: comment threads in the gutter, pending comments, the "Finish your review" box.
 - **The Claude Code mod** runs inside each Claude Code session and hands the finished review to that session as your next message.
 
 They talk through files under `~/.claude/handback/`; see [docs/architecture.md](docs/architecture.md).
@@ -30,7 +30,7 @@ They talk through files under `~/.claude/handback/`; see [docs/architecture.md](
 
 1. Hover a line and click the **+** in the gutter, or select several lines first. Write your comment and press **Start a review**, or **Add single comment** to send just that one comment right away.
 2. Keep going with **Add review comment**. Each comment shows a **Pending** badge; edit or delete it from its **…** menu. A pending review survives reloading the window; **Handback: Discard pending review** drops it.
-3. Press **Finish your review** in the status bar or the editor's title bar. Leave a summary if you like, pick a verdict and press **Submit review** (or Ctrl+Enter). The review arrives in Claude Code as your next message: your summary, then every comment with its file, its lines and the code around them.
+3. Press **Finish your review** in the status bar or the editor's title bar. A box opens at the top of the window, like the command palette: type a one-line summary if you like, pick a verdict and press Enter. The verdict you used last comes first, and **Discard pending review** sits at the bottom. The review arrives in Claude Code as your next message: your summary, then every comment with its file, its lines and the code around them.
 
 The verdict tells Claude how to take the comments:
 

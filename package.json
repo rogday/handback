@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint --max-warnings 0 .",
-    "check": "tsc -p extension && tsc -p extension/src/webview && tsc -p extension/test && tsc -p plugin",
+    "check": "tsc -p extension && tsc -p extension/test && tsc -p plugin",
     "test": "npm test -w extension",
     "test:integration": "npm run test:integration -w extension",
     "plugin:check": "node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin validate . && node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin validate plugin && node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin test plugin",

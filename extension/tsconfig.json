@@ -14,6 +14,5 @@
     "erasableSyntaxOnly": true,
     "skipLibCheck": true
   },
-  "include": ["src", "../plugin/hooks/protocol.ts"],
-  "exclude": ["src/webview"]
+  "include": ["src", "../plugin/hooks/protocol.ts"]
 }

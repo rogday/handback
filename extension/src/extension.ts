@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import * as vscode from 'vscode'
 import { isDeliveryMode, type DeliveryMode, type SessionRecord } from '../../plugin/hooks/protocol.ts'
 import { deliver, sessionsFor, type DeliveryResult } from './delivery.ts'
-import { FinishReviewDialog } from './finishDialog.ts'
+import { FinishReviewPicker } from './finishPicker.ts'
 import {
   commentedSpan,
   excerptSpan,
@@ -41,13 +41,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const review = new PendingReview()
   const finishButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, FINISH_BUTTON_PRIORITY)
   finishButton.command = 'handback.finishReview'
-  const dialog = new FinishReviewDialog(context.extensionUri, context.globalState, {
+  const picker = new FinishReviewPicker(context.globalState, {
     submit: ({ verdict, summary }) => finishReview(review, verdict, summary),
     discard: () => discardReview(review),
   })
   review.onDidChange(() => {
     showPendingCount(review.commentCount, finishButton)
-    dialog.showPendingCount(review.commentCount)
     void context.workspaceState.update(PENDING_REVIEW_KEY, review.toSaved())
   })
 
@@ -77,7 +76,6 @@ export function activate(context: vscode.ExtensionContext): void {
     controller,
     review,
     finishButton,
-    dialog,
     vscode.commands.registerCommand('handback.startReview', addReviewComment),
     vscode.commands.registerCommand('handback.addReviewComment', addReviewComment),
     vscode.commands.registerCommand('handback.addSingleComment', addSingleComment),
@@ -97,7 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('handback.sendDraft', sendDraft),
     vscode.commands.registerCommand('handback.discardDraft', (comment: ReviewComment) => comment.thread.dispose()),
-    vscode.commands.registerCommand('handback.finishReview', () => dialog.show(review.commentCount)),
+    vscode.commands.registerCommand('handback.finishReview', () => picker.show(review.commentCount)),
     vscode.commands.registerCommand('handback.discardReview', () => discardReview(review)),
   )
 }
@@ -127,7 +125,10 @@ function showPendingCount(count: number, finishButton: vscode.StatusBarItem): vo
 
 async function finishReview(review: PendingReview, verdict: Verdict, summary: string): Promise<boolean> {
   // An approval alone says something; an empty comment does not.
-  if (review.threads.length === 0 && summary.trim() === '' && verdict !== 'approve') return false
+  if (review.threads.length === 0 && summary.trim() === '' && verdict !== 'approve') {
+    void vscode.window.showInformationMessage('Nothing to send: leave a comment on a line or a summary first.')
+    return false
+  }
   const threads = await Promise.all(review.threads.map(reviewedThread))
   const paths = review.threads.map(thread => thread.uri.fsPath)
   const isSent = await send(formatReview({ verdict, summary, threads }), paths)

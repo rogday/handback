@@ -52,6 +52,20 @@ test('Add single comment sends the comment and its code to the session and leave
   assert.deepEqual(await readdir(sessionInboxDir(homedir(), 'only')), [])
 })
 
+test('a review started on a line and finished in the box reaches the session as one message', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const mod = playMod('only', 'submitted')
+
+  await vscode.commands.executeCommand('handback.startReview', await reply('Name this after what it holds.'))
+  await vscode.commands.executeCommand('handback.finishReview')
+  await pressEnterOnQuickPickUntil(mod)
+
+  const review = await mod
+  assert.match(review, /^\*\*Code review\*\* \(1 comment\)/)
+  assert.match(review, /Name this after what it holds\./)
+})
+
 test('with several sessions the picker offers the one prompted last first', async () => {
   await forgetEverything()
   await announce('earlier', Date.now() - 60_000)
