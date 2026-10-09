@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.vsix
+# Laid by Claude Code each time it loads the mod.
+plugin/.claude-plugin/types/

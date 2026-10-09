@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Finish your review</title>
+    <link rel="stylesheet" href="{{styleUri}}" />
+  </head>
+  <body>
+    <form id="review">
+      <h1>Finish your review</h1>
+      <div class="body">
+        <textarea id="summary" placeholder="Leave a comment" aria-label="Review summary"></textarea>
+        <p class="hint">Markdown is supported. Ctrl+Enter submits.</p>
+        <fieldset>
+          <legend class="visually-hidden">Verdict</legend>
+          <label class="choice">
+            <input type="radio" name="verdict" value="comment" />
+            <span><strong>Comment</strong><small>Submit general feedback without explicit approval.</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="verdict" value="approve" />
+            <span><strong>Approve</strong><small>Give your approval to these changes.</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="verdict" value="requestChanges" />
+            <span><strong>Request changes</strong><small>Submit feedback that must be addressed.</small></span>
+          </label>
+        </fieldset>
+      </div>
+      <footer>
+        <span id="pending"></span>
+        <button type="button" id="discard" class="secondary">Discard review</button>
+        <button type="submit" id="submit">Submit review</button>
+      </footer>
+    </form>
+    <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
+  </body>
+</html>

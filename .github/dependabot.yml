@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      development:
+        patterns: ['*']
+    ignore:
+      # Matches engines.vscode: the oldest VS Code the extension supports.
+      - dependency-name: '@types/vscode'
+      # Matches the Node of that VS Code's extension host.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint supports TypeScript below 6.1.
+      - dependency-name: typescript
+        versions: ['>=6.1.0']
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /.devcontainer
+    schedule:
+      interval: weekly

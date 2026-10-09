@@ -1,0 +1,33 @@
+{
+  "name": "handback-repo",
+  "private": true,
+  "description": "Development tooling for the Handback extension and mod.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "extension"
+  ],
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint --max-warnings 0 .",
+    "check": "tsc -p extension && tsc -p extension/src/webview && tsc -p extension/test && tsc -p plugin",
+    "test": "npm test -w extension",
+    "test:integration": "npm run test:integration -w extension",
+    "plugin:check": "node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin validate . && node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin validate plugin && node node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs plugin test plugin",
+    "package": "npm run package -w extension",
+    "verify": "npm run format:check && npm run lint && npm run check && npm test && npm run plugin:check"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "2.1.295",
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.1"
+  }
+}

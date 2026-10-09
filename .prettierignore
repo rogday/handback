@@ -1,0 +1,8 @@
+dist/
+*.vsix
+package-lock.json
+plugin/.claude-plugin/types/
+# Copied from the root at package time.
+extension/LICENSE
+extension/README.md
+extension/CHANGELOG.md

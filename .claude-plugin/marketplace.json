@@ -1,0 +1,14 @@
+{
+  "name": "handback",
+  "description": "GitHub-style code review for Claude Code: the mod that hands reviews from the Handback VS Code extension to your Claude Code session.",
+  "owner": {
+    "name": "rogday"
+  },
+  "plugins": [
+    {
+      "name": "handback",
+      "source": "./plugin",
+      "description": "Delivers reviews finished in the Handback VS Code extension to this Claude Code session."
+    }
+  ]
+}

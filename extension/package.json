@@ -1,0 +1,289 @@
+{
+  "name": "handback",
+  "displayName": "Handback",
+  "description": "GitHub-style code review for Claude Code: comment on lines, finish the review, and it lands in the open Claude Code chat.",
+  "version": "0.1.0",
+  "publisher": "rogday",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rogday/handback"
+  },
+  "homepage": "https://github.com/rogday/handback#readme",
+  "bugs": {
+    "url": "https://github.com/rogday/handback/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude code",
+    "code review",
+    "review comments",
+    "pull request",
+    "github",
+    "ai"
+  ],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "galleryBanner": {
+    "color": "#0969da",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "handback.startReview",
+        "title": "Start a review"
+      },
+      {
+        "command": "handback.addReviewComment",
+        "title": "Add review comment"
+      },
+      {
+        "command": "handback.addSingleComment",
+        "title": "Add single comment"
+      },
+      {
+        "command": "handback.cancelThread",
+        "title": "Cancel"
+      },
+      {
+        "command": "handback.editComment",
+        "title": "Edit"
+      },
+      {
+        "command": "handback.deleteComment",
+        "title": "Delete"
+      },
+      {
+        "command": "handback.saveComment",
+        "title": "Update comment"
+      },
+      {
+        "command": "handback.cancelEdit",
+        "title": "Cancel"
+      },
+      {
+        "command": "handback.startReviewWithDraft",
+        "title": "Start a review"
+      },
+      {
+        "command": "handback.addDraftToReview",
+        "title": "Add review comment"
+      },
+      {
+        "command": "handback.sendDraft",
+        "title": "Add single comment"
+      },
+      {
+        "command": "handback.discardDraft",
+        "title": "Cancel"
+      },
+      {
+        "command": "handback.suggestChange",
+        "title": "Suggest a change",
+        "category": "Handback"
+      },
+      {
+        "command": "handback.finishReview",
+        "title": "Finish your review",
+        "category": "Handback",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "handback.discardReview",
+        "title": "Discard pending review",
+        "category": "Handback"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "handback.startReview",
+          "when": "false"
+        },
+        {
+          "command": "handback.addReviewComment",
+          "when": "false"
+        },
+        {
+          "command": "handback.addSingleComment",
+          "when": "false"
+        },
+        {
+          "command": "handback.cancelThread",
+          "when": "false"
+        },
+        {
+          "command": "handback.editComment",
+          "when": "false"
+        },
+        {
+          "command": "handback.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "handback.cancelEdit",
+          "when": "false"
+        },
+        {
+          "command": "handback.deleteComment",
+          "when": "false"
+        },
+        {
+          "command": "handback.discardReview",
+          "when": "handback.reviewInProgress"
+        },
+        {
+          "command": "handback.startReviewWithDraft",
+          "when": "false"
+        },
+        {
+          "command": "handback.addDraftToReview",
+          "when": "false"
+        },
+        {
+          "command": "handback.sendDraft",
+          "when": "false"
+        },
+        {
+          "command": "handback.discardDraft",
+          "when": "false"
+        },
+        {
+          "command": "handback.suggestChange",
+          "when": "editorIsOpen && resourceScheme == file"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "handback.startReview",
+          "group": "inline@1",
+          "when": "commentController == handback && !handback.reviewInProgress"
+        },
+        {
+          "command": "handback.addReviewComment",
+          "group": "inline@1",
+          "when": "commentController == handback && handback.reviewInProgress"
+        },
+        {
+          "command": "handback.addSingleComment",
+          "group": "inline@2",
+          "when": "commentController == handback && !handback.reviewInProgress"
+        },
+        {
+          "command": "handback.cancelThread",
+          "group": "inline@3",
+          "when": "commentController == handback && commentThreadIsEmpty"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "handback.editComment",
+          "group": "edit@1",
+          "when": "commentController == handback && comment == pending"
+        },
+        {
+          "command": "handback.deleteComment",
+          "group": "edit@2",
+          "when": "commentController == handback && comment == pending"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "handback.saveComment",
+          "group": "inline@1",
+          "when": "commentController == handback && comment == pending"
+        },
+        {
+          "command": "handback.cancelEdit",
+          "group": "inline@2",
+          "when": "commentController == handback && comment == pending"
+        },
+        {
+          "command": "handback.startReviewWithDraft",
+          "group": "inline@1",
+          "when": "commentController == handback && comment == draft && !handback.reviewInProgress"
+        },
+        {
+          "command": "handback.addDraftToReview",
+          "group": "inline@1",
+          "when": "commentController == handback && comment == draft && handback.reviewInProgress"
+        },
+        {
+          "command": "handback.sendDraft",
+          "group": "inline@2",
+          "when": "commentController == handback && comment == draft && !handback.reviewInProgress"
+        },
+        {
+          "command": "handback.discardDraft",
+          "group": "inline@3",
+          "when": "commentController == handback && comment == draft"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "handback.finishReview",
+          "group": "navigation",
+          "when": "handback.reviewInProgress"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "handback.suggestChange",
+          "group": "handback@1",
+          "when": "resourceScheme == file"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Handback",
+      "properties": {
+        "handback.delivery": {
+          "type": "string",
+          "enum": [
+            "send",
+            "fill"
+          ],
+          "enumDescriptions": [
+            "Send the review as your next message.",
+            "Put the review in the prompt box, for you to add to and send yourself."
+          ],
+          "default": "send",
+          "description": "What Submit review does with the review in Claude Code."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --loader:.html=text --outfile=dist/extension.js",
+    "build:webview": "esbuild src/webview/finishDialog.ts src/webview/finishDialog.css --bundle --platform=browser --format=iife --target=es2022 --outdir=dist/webview",
+    "build:test": "esbuild test/integration/suite.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/test/suite.js",
+    "check": "tsc -p .",
+    "test": "node --test 'src/**/*.test.ts'",
+    "test:integration": "npm run build && npm run build:test && node test/integration/run.ts",
+    "vscode:prepublish": "npm run build:extension -- --minify && npm run build:webview -- --minify",
+    "package": "cp ../LICENSE ../README.md ../CHANGELOG.md . && vsce package --no-dependencies -o handback.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2"
+  }
+}
