@@ -16,7 +16,7 @@ Run from the repository root; none needs permission:
 
 - `npm run verify`: everything below but packaging. The pre-push hook in `.githooks/` runs it (`git config core.hooksPath .githooks`, which the devcontainer sets); there is no hosted CI.
 - `npm run format` (`format:check` to only look), `npm run lint`, `npm run check` (type-checks both halves; the mod's needs the declarations Claude Code lays when it loads the mod), `npm test`.
-- `npm run test:integration`: runs `extension/test/integration/` in a real VS Code (a pinned version, downloaded once to `~/.cache/vscode-test`), headless, with HOME pointed at a scratch folder; the tests play the mod through the file protocol. The pre-push hook runs it after `verify`.
+- `npm run test:integration`: runs `extension/test/integration/` in a real VS Code (a pinned version, downloaded once to `~/.cache/vscode-test`), headless, with HOME pointed at a scratch folder; the tests play the mod through the file protocol. It prints only the results; VS Code's own output goes to a log in that scratch folder, named when a run fails. The pre-push hook runs it after `verify`, and prints a step's output only when the step fails.
 - `npm run package`: builds `extension/handback.vsix`.
 - `npm run plugin:check`: validates the marketplace and the mod and runs the mod's tests on the Claude Code pinned in `devDependencies`. The mod API is early access, so the engine it is checked against is an exact version too; `cli-wrapper.cjs` runs it because install scripts are off.
 
