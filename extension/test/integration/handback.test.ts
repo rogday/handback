@@ -88,6 +88,48 @@ test('a comment quotes the code as it was written on, and says so once the file 
   }
 })
 
+test('an edited comment is sent as saved', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const comment = await pendingComment('First draft.')
+
+  await vscode.commands.executeCommand('handback.editComment', comment)
+  comment.body.value = 'Better words.'
+  await vscode.commands.executeCommand('handback.saveComment', comment)
+  const review = await finishReview('only')
+
+  assert.match(review, /Better words\./)
+  assert.doesNotMatch(review, /First draft\./)
+})
+
+test('a cancelled edit keeps the comment as it was', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const comment = await pendingComment('Keep me.')
+
+  await vscode.commands.executeCommand('handback.editComment', comment)
+  comment.body.value = 'Not this.'
+  await vscode.commands.executeCommand('handback.cancelEdit', comment)
+  const review = await finishReview('only')
+
+  assert.match(review, /Keep me\./)
+  assert.doesNotMatch(review, /Not this\./)
+})
+
+test('a deleted comment leaves the review', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  await pendingComment('Stays.')
+  const deleted = await pendingComment('Goes.')
+
+  await vscode.commands.executeCommand('handback.deleteComment', deleted)
+  const review = await finishReview('only')
+
+  assert.match(review, /\(1 comment\)/)
+  assert.match(review, /Stays\./)
+  assert.doesNotMatch(review, /Goes\./)
+})
+
 test('with several sessions the picker offers the one prompted last first', async () => {
   await forgetEverything()
   await announce('earlier', Date.now() - 60_000)
@@ -193,6 +235,26 @@ async function answer(sessionId: string, reviewId: string, outcome: DeliveryOutc
   const inbox = sessionInboxDir(homedir(), sessionId)
   await writeFile(join(inbox, deliveredFileName(reviewId)), outcome)
   while ((await readdir(inbox).catch(() => [])).length > 0) await sleep(MOD_POLL_MS)
+}
+
+/** A comment of the pending review, as VS Code hands it to the comment's menu commands. */
+type PendingComment = vscode.Comment & { body: vscode.MarkdownString }
+
+/** Starts or adds to the review with a comment on the sample line. */
+async function pendingComment(text: string): Promise<PendingComment> {
+  const pending = await reply(text)
+  await vscode.commands.executeCommand('handback.startReview', pending)
+  const [comment] = pending.thread.comments
+  assert.ok(comment?.body instanceof vscode.MarkdownString, 'the comment joined the review')
+  return comment as PendingComment
+}
+
+/** Finishes the pending review with the box's first verdict and resolves what the session received. */
+async function finishReview(sessionId: string): Promise<string> {
+  const mod = playMod(sessionId, 'submitted')
+  await vscode.commands.executeCommand('handback.finishReview')
+  await pressEnterOnQuickPickUntil(mod)
+  return mod
 }
 
 async function pressEnterOnQuickPickUntil(done: Promise<unknown>): Promise<void> {
