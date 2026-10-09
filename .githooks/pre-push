@@ -1,3 +1,19 @@
 #!/bin/sh
-# Nothing leaves without passing the checks: format, lint, type-check, unit and integration tests.
-npm run verify && exec npm run test:integration
+# Nothing leaves without passing the checks. A step that passes prints one line; one that fails prints all it said.
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+
+step() {
+  name=$1
+  shift
+  if "$@" >"$log" 2>&1; then
+    echo "pre-push: $name passed"
+    return
+  fi
+  cat "$log"
+  echo "pre-push: $name failed, push stopped" >&2
+  exit 1
+}
+
+step checks npm run --silent verify
+step "integration tests" npm run --silent test:integration
