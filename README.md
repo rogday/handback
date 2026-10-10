@@ -42,6 +42,8 @@ The verdict tells Claude how to take the comments:
 
 Each comment quotes the code as it was when you wrote it. If the file on disk no longer reads that way when you send the review, because you haven't saved or the code changed since, the review tells Claude so.
 
+You can comment on other versions of a file too: a commit opened from the Source Control Graph or the Timeline, either side of a diff, the staged version. Claude is told which version a comment is on (`HEAD`, a commit, the index) and gets its code as you saw it.
+
 ### Suggesting a change
 
 Select lines (or put the cursor on one), right-click and choose **Suggest a change**. A comment opens on them holding a `suggestion` block with their code, as GitHub's "Add a suggestion" does: edit it into what the lines should be, add words around it if you like, and **Start a review** or **Add single comment**. Claude is told the block replaces the commented lines.

@@ -21,6 +21,8 @@ import {
 import { test } from './harness.ts'
 
 const EXTENSION_ID = 'rogday.handback'
+const GIT_EXTENSION_ID = 'vscode.git'
+const GIT_API_VERSION = 1
 const SAMPLE = 'src/sample.ts'
 /** 0-based: `let sum = 0`. */
 const SAMPLE_LINE = 1
@@ -28,6 +30,11 @@ const MOD_POLL_MS = 50
 const QUICK_PICK_POLL_MS = 100
 
 type Manifest = { contributes: { commands: { command: string }[] } }
+/** The part of the git extension's API the tests use. */
+type GitApi = {
+  openRepository(root: vscode.Uri): Promise<unknown>
+  toGitUri(uri: vscode.Uri, ref: string): vscode.Uri
+}
 
 test('every command the manifest contributes has a handler', async () => {
   const extension = vscode.extensions.getExtension(EXTENSION_ID)
@@ -83,6 +90,26 @@ test('a comment quotes the code as it was written on, and says so once the file 
     const review = await mod
     assert.match(review, /2 > {3}let sum = 0/)
     assert.match(review, /file on disk no longer/)
+  } finally {
+    await writeFile(sample.fsPath, original)
+  }
+})
+
+test('a comment on the committed version names it and quotes it, whatever the file on disk says', async () => {
+  await forgetEverything()
+  await announce('only', Date.now())
+  const sample = vscode.Uri.joinPath(workspaceRoot(), SAMPLE)
+  const original = await readFile(sample.fsPath, 'utf8')
+  const atHead = (await gitApi()).toGitUri(sample, 'HEAD')
+  const mod = playMod('only', 'submitted')
+  try {
+    await writeFile(sample.fsPath, original.replace('let sum = 0', 'let sum = prices.length'))
+    await vscode.commands.executeCommand('handback.addSingleComment', await reply('Why did this go?', atHead))
+
+    const review = await mod
+    assert.match(review, /\*\*src\/sample\.ts\*\* line 2 at `HEAD`/)
+    assert.match(review, /2 > {3}let sum = 0/)
+    assert.doesNotMatch(review, /file on disk no longer/)
   } finally {
     await writeFile(sample.fsPath, original)
   }
@@ -197,9 +224,20 @@ async function announce(id: string, lastPromptAt: number): Promise<void> {
   await writeFile(`${sessionsDir(homedir())}/${sessionFileName(id)}`, JSON.stringify(record))
 }
 
-/** What VS Code hands the extension when the person presses a button under a new comment on the sample line. */
-async function reply(text: string): Promise<vscode.CommentReply> {
-  const uri = vscode.Uri.joinPath(workspaceRoot(), SAMPLE)
+/** The git extension's API, once it has opened the fixture's repository. */
+async function gitApi(): Promise<GitApi> {
+  const extension = vscode.extensions.getExtension<{ getAPI(version: number): GitApi }>(GIT_EXTENSION_ID)
+  assert.ok(extension, `${GIT_EXTENSION_ID} is not loaded`)
+  const api = (await extension.activate()).getAPI(GIT_API_VERSION)
+  await api.openRepository(workspaceRoot())
+  return api
+}
+
+/**
+ * What VS Code hands the extension when the person presses a button under a new comment on the sample line, in the
+ * working tree unless `uri` names another version of the sample.
+ */
+async function reply(text: string, uri = vscode.Uri.joinPath(workspaceRoot(), SAMPLE)): Promise<vscode.CommentReply> {
   await vscode.window.showTextDocument(uri)
   const controller = vscode.comments.createCommentController('handback-test', 'Test')
   const thread = controller.createCommentThread(uri, new vscode.Range(SAMPLE_LINE, 0, SAMPLE_LINE, 0), [])

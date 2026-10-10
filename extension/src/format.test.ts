@@ -70,8 +70,19 @@ test('Claude is told when the file on disk no longer holds the commented code', 
   assert.doesNotMatch(formatReview({ verdict: 'comment', summary: '', threads: [intact] }), /file on disk no longer/)
 })
 
+test('a comment on another version of a file names it, and each version of a file is kept together', () => {
+  const working = thread('a.ts', { start: 3, end: 3 }, ['x', 'y', 'z'], 'Here.')
+  const committed = { ...thread('a.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Before.'), revision: { ref: 'HEAD' } }
+  const staged = { ...thread('a.ts', { start: 1, end: 1 }, ['x', 'y'], 'Staged.'), revision: 'index' as const }
+  const text = formatReview({ verdict: 'comment', summary: '', threads: [committed, working, staged] })
+
+  assert.ok(text.includes('**a.ts** line 2 at `HEAD`'))
+  assert.ok(text.includes('**a.ts** line 1 in the index'))
+  assert.ok(text.indexOf('**a.ts** line 3\n') < text.indexOf('at `HEAD`'), 'the working tree first')
+})
+
 function thread(path: string, commented: ReviewedThread['commented'], lines: string[], body: string): ReviewedThread {
   const languageId = path.endsWith('.md') ? 'markdown' : 'typescript'
   const excerpt = { firstLine: commented.start - 1 || 1, lines }
-  return { path, languageId, commented, excerpt, bodies: [body], isChangedOnDisk: false }
+  return { path, languageId, commented, excerpt, revision: undefined, bodies: [body], isChangedOnDisk: false }
 }

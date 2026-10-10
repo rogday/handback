@@ -28,9 +28,14 @@ export type Snapshot = {
   excerpt: Excerpt
 }
 
+/** A version of a file other than the working tree's: a git revision such as a commit or `HEAD`, or the index. */
+export type Revision = { ref: string } | 'index'
+
 export type ReviewedThread = Snapshot & {
   /** Relative to the workspace. */
   path: string
+  /** The version of the file commented on, unless it is the working tree's. */
+  revision: Revision | undefined
   /** The thread's comments, oldest first. */
   bodies: readonly string[]
   /** The file on disk, which Claude reads, no longer holds the commented lines where they were. */
@@ -114,7 +119,13 @@ function formatThread(thread: ReviewedThread): string {
   const { start, end } = thread.commented
   const lines = start === end ? `line ${start}` : `lines ${start}–${end}`
   const note = thread.isChangedOnDisk ? [CHANGED_ON_DISK_NOTE] : []
-  return [`**${thread.path}** ${lines}`, ...note, formatExcerpt(thread), ...thread.bodies].join('\n\n')
+  const heading = `**${thread.path}** ${lines}${versionOf(thread.revision)}`
+  return [heading, ...note, formatExcerpt(thread), ...thread.bodies].join('\n\n')
+}
+
+function versionOf(revision: Revision | undefined): string {
+  if (revision === undefined) return ''
+  return revision === 'index' ? ' in the index' : ` at \`${revision.ref}\``
 }
 
 function formatExcerpt({ languageId, commented, excerpt }: ReviewedThread): string {
@@ -137,7 +148,11 @@ function fenceFor(lines: readonly string[]): string {
 }
 
 function byPlace(a: ReviewedThread, b: ReviewedThread): number {
-  return a.path.localeCompare(b.path) || a.commented.start - b.commented.start
+  return (
+    a.path.localeCompare(b.path) ||
+    versionOf(a.revision).localeCompare(versionOf(b.revision)) ||
+    a.commented.start - b.commented.start
+  )
 }
 
 function plural(count: number, noun: string): string {

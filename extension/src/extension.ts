@@ -6,7 +6,7 @@ import { FinishReviewPicker } from './finishPicker.ts'
 import { formatComment, formatReview, suggestionBlock, type Verdict } from './format.ts'
 import { PendingReview, ReviewComment, parseSavedThreads } from './review.ts'
 import { send } from './send.ts'
-import { reviewedThreads, selectedLines, snapshotOf } from './threads.ts'
+import { fileVersionOf, reviewedThreads, selectedLines, snapshotOf, threadFileVersion } from './threads.ts'
 
 const CONTROLLER_ID = 'handback'
 const REVIEW_IN_PROGRESS = 'handback.reviewInProgress'
@@ -83,7 +83,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function wholeFile(document: vscode.TextDocument): vscode.Range[] | undefined {
-  if (document.uri.scheme !== 'file') return undefined
+  if (fileVersionOf(document.uri) === undefined) return undefined
   return [new vscode.Range(0, 0, document.lineCount - 1, 0)]
 }
 
@@ -102,7 +102,7 @@ async function finishReview(review: PendingReview, verdict: Verdict, summary: st
     return false
   }
   const threads = await reviewedThreads(review.entries)
-  const paths = review.threads.map(thread => thread.uri.fsPath)
+  const paths = review.threads.map(thread => threadFileVersion(thread).file.fsPath)
   const isSent = await send(formatReview({ verdict, summary, threads }), paths)
   if (isSent) review.clear()
   return isSent
@@ -114,7 +114,7 @@ async function sendSingleComment(review: PendingReview, thread: vscode.CommentTh
   if (entry === undefined) return
   const [reviewed] = await reviewedThreads([entry])
   if (reviewed === undefined) return
-  const isSent = await send(formatComment(reviewed), [thread.uri.fsPath])
+  const isSent = await send(formatComment(reviewed), [threadFileVersion(thread).file.fsPath])
   if (isSent) review.removeThread(thread)
 }
 

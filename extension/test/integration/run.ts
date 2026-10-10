@@ -1,11 +1,12 @@
 // Runs the integration tests in a real VS Code: `npm run test:integration`. Prints the results; VS Code's own
 // output (Chromium, its agent host, API proposals) goes to a log, named when something fails.
 
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { SilentReporter, downloadAndUnzipVSCode } from '@vscode/test-electron'
 import { REPORT_ENV } from './harness.ts'
 
@@ -16,6 +17,7 @@ import { REPORT_ENV } from './harness.ts'
 const VSCODE_VERSION = '1.141.0'
 /** When VS Code dies before any test ran, the end of its log says why. */
 const LOG_TAIL_LINES = 30
+const execFileAsync = promisify(execFile)
 const extensionRoot = join(import.meta.dirname, '..', '..')
 // Outside the repository: the download is a few hundred megabytes and is reused across runs.
 const cachePath = join(homedir(), '.cache', 'vscode-test')
@@ -27,6 +29,7 @@ const reportPath = join(scratch, 'report.txt')
 const logPath = join(scratch, 'vscode.log')
 await cp(join(extensionRoot, 'test', 'fixture'), workspace, { recursive: true })
 await mkdir(home)
+await commitFixture()
 
 console.log(`Integration tests in VS Code ${VSCODE_VERSION}`)
 const executable = await downloadAndUnzipVSCode({ version: VSCODE_VERSION, cachePath, reporter: new SilentReporter() })
@@ -37,6 +40,17 @@ if (exitCode !== 0) {
   if (results === '') process.stdout.write(await logTail())
   console.error(`VS Code exited with ${String(exitCode)}. Its output: ${logPath}`)
   process.exitCode = 1
+}
+
+/** The fixture as a repository of one commit, so the tests can comment on a file's committed version. */
+async function commitFixture(): Promise<void> {
+  // The scratch HOME keeps the person's git config (signing, hooks) out of it.
+  const env = { ...process.env, HOME: home }
+  const identity = ['-c', 'user.name=Handback', '-c', 'user.email=handback@localhost']
+  const git = (...args: string[]) => execFileAsync('git', [...identity, ...args], { cwd: workspace, env })
+  await git('init', '--quiet')
+  await git('add', '.')
+  await git('commit', '--quiet', '--message', 'Fixture')
 }
 
 async function runVSCode(executable: string): Promise<number | null> {

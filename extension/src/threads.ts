@@ -8,9 +8,36 @@ import {
   type Excerpt,
   type LineSpan,
   type ReviewedThread,
+  type Revision,
   type Snapshot,
 } from './format.ts'
 import { reviewComments, type ReviewEntry } from './review.ts'
+
+/** VS Code's git extension opens a file's other versions under this scheme, the query naming the file and version. */
+const GIT_SCHEME = 'git'
+/**
+ * The git extension's refs for the index: `''`, and `'~'` for the left side of a working tree diff, which reads the
+ * index when the file has staged changes and HEAD otherwise, the same text as the index then.
+ */
+const INDEX_REFS = new Set(['', '~'])
+
+/** A file of the working tree as a document shows it: as it stands, or at a revision. */
+export type FileVersion = {
+  file: vscode.Uri
+  revision: Revision | undefined
+}
+
+/** Undefined for a document that shows no file of the working tree: an untitled one, output, settings. */
+export function fileVersionOf(uri: vscode.Uri): FileVersion | undefined {
+  if (uri.scheme === 'file') return { file: uri, revision: undefined }
+  if (uri.scheme === GIT_SCHEME) return gitFileVersion(uri.query)
+  return undefined
+}
+
+/** The file and version a review thread is on; a thread opens only where `fileVersionOf` finds a file. */
+export function threadFileVersion(thread: vscode.CommentThread): FileVersion {
+  return fileVersionOf(thread.uri) ?? { file: thread.uri, revision: undefined }
+}
 
 /** The selection grown to whole lines, as a comment takes them. */
 export function selectedLines(editor: vscode.TextEditor): { range: vscode.Range; lines: string[] } {
@@ -43,13 +70,34 @@ export async function reviewedThreads(entries: readonly ReviewEntry[]): Promise<
     return read
   }
   return Promise.all(
-    entries.map(async ({ thread, snapshot }) => ({
-      ...snapshot,
-      path: vscode.workspace.asRelativePath(thread.uri, false),
-      bodies: reviewComments(thread).map(comment => comment.text),
-      isChangedOnDisk: !isCommentedCodeIntact(snapshot, await linesOf(thread.uri)),
-    })),
+    entries.map(async ({ thread, snapshot }) => {
+      const { file, revision } = threadFileVersion(thread)
+      return {
+        ...snapshot,
+        path: vscode.workspace.asRelativePath(file, false),
+        revision,
+        bodies: reviewComments(thread).map(comment => comment.text),
+        // A revision is quoted as that version: the working tree is free to differ from it.
+        isChangedOnDisk: revision === undefined && !isCommentedCodeIntact(snapshot, await linesOf(file)),
+      }
+    }),
   )
+}
+
+function gitFileVersion(query: string): FileVersion | undefined {
+  const params = parseJson(query)
+  if (typeof params !== 'object' || params === null) return undefined
+  const { path, ref } = params as Record<string, unknown>
+  if (typeof path !== 'string' || typeof ref !== 'string') return undefined
+  return { file: vscode.Uri.file(path), revision: INDEX_REFS.has(ref) ? 'index' : { ref } }
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 function excerptOf(document: vscode.TextDocument, commented: LineSpan): Excerpt {
