@@ -83,7 +83,7 @@ export type ReviewEntry = {
 
 /** The threads of the review being written, like a pull request's pending review. */
 export class PendingReview implements vscode.Disposable {
-  // Each thread with the code as it was when its first comment was written.
+  // Each thread with the code as it was when its first comment was written, in the order the threads joined the review.
   readonly #snapshots = new Map<vscode.CommentThread, Snapshot>()
   readonly #changed = new vscode.EventEmitter<void>()
   readonly onDidChange = this.#changed.event
@@ -92,6 +92,7 @@ export class PendingReview implements vscode.Disposable {
     return [...this.#snapshots.keys()]
   }
 
+  /** In the order the threads joined the review, which is the order Claude reads them in. */
   get entries(): readonly ReviewEntry[] {
     return [...this.#snapshots].map(([thread, snapshot]) => ({ thread, snapshot }))
   }

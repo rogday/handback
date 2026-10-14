@@ -20,13 +20,13 @@ test('the excerpt stays within the file', () => {
   assert.deepEqual(excerptSpan({ start: 99, end: 100 }, 100), { start: 96, end: 100 })
 })
 
-test('threads are ordered by file and line, and the commented lines are marked', () => {
-  const later = thread('b.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Rename y.')
-  const earlier = thread('a.ts', { start: 9, end: 10 }, ['p', 'q', 'r'], 'Why two lines?')
-  const text = formatReview({ verdict: 'requestChanges', summary: '', threads: [later, earlier] })
+test('threads keep the order they were written in, and the commented lines are marked', () => {
+  const first = thread('b.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Rename y.')
+  const second = thread('a.ts', { start: 9, end: 10 }, ['p', 'q', 'r'], 'After renaming y, drop these.')
+  const text = formatReview({ verdict: 'requestChanges', summary: '', threads: [first, second] })
 
   assert.ok(text.startsWith('**Code review: changes requested** (2 comments)'))
-  assert.ok(text.indexOf('**a.ts** lines 9–10') < text.indexOf('**b.ts** line 2'))
+  assert.ok(text.indexOf('**b.ts** line 2') < text.indexOf('**a.ts** lines 9–10'))
   assert.ok(text.includes(' 8   p\n 9 > q\n10 > r'))
   assert.ok(text.includes('1   x\n2 > y\n3   z'))
 })
@@ -70,15 +70,13 @@ test('Claude is told when the file on disk no longer holds the commented code', 
   assert.doesNotMatch(formatReview({ verdict: 'comment', summary: '', threads: [intact] }), /file on disk no longer/)
 })
 
-test('a comment on another version of a file names it, and each version of a file is kept together', () => {
-  const working = thread('a.ts', { start: 3, end: 3 }, ['x', 'y', 'z'], 'Here.')
+test('a comment on another version of a file names it', () => {
   const committed = { ...thread('a.ts', { start: 2, end: 2 }, ['x', 'y', 'z'], 'Before.'), revision: { ref: 'HEAD' } }
   const staged = { ...thread('a.ts', { start: 1, end: 1 }, ['x', 'y'], 'Staged.'), revision: 'index' as const }
-  const text = formatReview({ verdict: 'comment', summary: '', threads: [committed, working, staged] })
+  const text = formatReview({ verdict: 'comment', summary: '', threads: [committed, staged] })
 
   assert.ok(text.includes('**a.ts** line 2 at `HEAD`'))
   assert.ok(text.includes('**a.ts** line 1 in the index'))
-  assert.ok(text.indexOf('**a.ts** line 3\n') < text.indexOf('at `HEAD`'), 'the working tree first')
 })
 
 function thread(path: string, commented: ReviewedThread['commented'], lines: string[], body: string): ReviewedThread {

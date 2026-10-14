@@ -45,6 +45,7 @@ export type ReviewedThread = Snapshot & {
 export type Review = {
   verdict: Verdict
   summary: string
+  /** In the order they were written: a comment may refer to an earlier one. */
   threads: readonly ReviewedThread[]
 }
 
@@ -87,7 +88,7 @@ export function excerptSpan(commented: LineSpan, lineCount: number): LineSpan {
 }
 
 export function formatReview(review: Review): string {
-  const threads = [...review.threads].sort(byPlace)
+  const { threads } = review
   const commentCount = threads.reduce((count, thread) => count + thread.bodies.length, 0)
   const heading = `**${HEADINGS[review.verdict]}**` + (commentCount > 0 ? ` (${plural(commentCount, 'comment')})` : '')
   const summary = review.summary.trim()
@@ -145,14 +146,6 @@ function formatExcerpt({ languageId, commented, excerpt }: ReviewedThread): stri
 function fenceFor(lines: readonly string[]): string {
   const longestRun = Math.max(0, ...lines.flatMap(line => line.match(/`+/g) ?? []).map(run => run.length))
   return '`'.repeat(Math.max(MIN_FENCE_LENGTH, longestRun + 1))
-}
-
-function byPlace(a: ReviewedThread, b: ReviewedThread): number {
-  return (
-    a.path.localeCompare(b.path) ||
-    versionOf(a.revision).localeCompare(versionOf(b.revision)) ||
-    a.commented.start - b.commented.start
-  )
 }
 
 function plural(count: number, noun: string): string {
