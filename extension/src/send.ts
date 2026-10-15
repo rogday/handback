@@ -19,13 +19,16 @@ type Agent = (typeof AGENTS)[number]
 /** Comes first in the picker until the person sends a review anywhere. */
 const FIRST_AGENT: Agent = 'claudeCode'
 const AGENT_NAMES: Record<Agent, string> = { claudeCode: 'Claude Code', copilotChat: 'Copilot Chat' }
+/** `handback.agent`: `any` offers every agent that can take the review. */
+const AGENT_SETTINGS = ['any', ...AGENTS] as const
+type AgentSetting = (typeof AGENT_SETTINGS)[number]
 
 /** Where a review can go: a Claude Code session running the mod, or this window's Copilot Chat. */
 type Target = { agent: 'claudeCode'; session: SessionRecord } | { agent: 'copilotChat' }
 
 /** How far a send got before anything more is asked of the person. */
 type Attempt =
-  | { outcome: 'noTarget' }
+  | { outcome: 'noTarget'; allowed: AgentSetting }
   | { outcome: 'otherProtocol'; isModOlder: boolean }
   | { outcome: 'notPicked' }
   | { outcome: 'copilotChatRefused'; reason: string }
@@ -60,10 +63,11 @@ export class ReviewSender {
   }
 
   async #attemptDelivery(text: string, paths: readonly string[]): Promise<Attempt> {
+    const allowed = agentSetting()
     const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
     const [candidates, isCopilotReady] = await Promise.all([
-      sessionsFor(paths.length > 0 ? paths : workspacePaths),
-      isCopilotChatReady(),
+      allowed === 'copilotChat' ? [] : sessionsFor(paths.length > 0 ? paths : workspacePaths),
+      allowed === 'claudeCode' ? false : isCopilotChatReady(),
     ])
     const sessions = candidates.filter(session => session.protocol === PROTOCOL_VERSION)
     const [other] = candidates.filter(session => session.protocol !== PROTOCOL_VERSION)
@@ -73,7 +77,7 @@ export class ReviewSender {
     }
     const targets: Target[] = sessions.map(session => ({ agent: 'claudeCode', session }))
     if (isCopilotReady) targets.push({ agent: 'copilotChat' })
-    if (targets.length === 0) return { outcome: 'noTarget' }
+    if (targets.length === 0) return { outcome: 'noTarget', allowed }
 
     const target = await pickTarget(targets, this.#lastAgent())
     if (target === undefined) return { outcome: 'notPicked' }
@@ -105,12 +109,7 @@ async function deliverToCopilotChat(text: string): Promise<Attempt> {
 }
 
 async function settle(attempt: Attempt, text: string): Promise<boolean> {
-  if (attempt.outcome === 'noTarget') {
-    return offerCopyOrMod(
-      text,
-      'No chat can take the review: no Claude Code session running the Handback mod is open on this workspace, and Copilot is not signed in.',
-    )
-  }
+  if (attempt.outcome === 'noTarget') return reportNoTarget(attempt.allowed, text)
   if (attempt.outcome === 'otherProtocol') {
     const update = attempt.isModOlder
       ? 'runs an older Handback mod: update it with `claude plugin update handback`'
@@ -122,6 +121,18 @@ async function settle(attempt: Attempt, text: string): Promise<boolean> {
   }
   if (attempt.outcome === 'notPicked') return false
   return reportDelivery(attempt.outcome, text, attempt.target)
+}
+
+async function reportNoTarget(allowed: AgentSetting, text: string): Promise<boolean> {
+  const noSession = 'no Claude Code session running the Handback mod is open on this workspace'
+  switch (allowed) {
+    case 'any':
+      return offerCopyOrMod(text, `No chat can take the review: ${noSession}, and Copilot is not signed in.`)
+    case 'claudeCode':
+      return offerCopyOrMod(text, `No Claude Code session can take the review: ${noSession}.`)
+    case 'copilotChat':
+      return offerCopy(text, 'Copilot Chat cannot take the review: sign in to Copilot.')
+  }
 }
 
 /**
@@ -224,6 +235,11 @@ async function handToClaudeChat(text: string): Promise<void> {
   void vscode.window.showInformationMessage(
     `The review is on your clipboard: press ${PASTE_KEY} in Claude Code to add it.`,
   )
+}
+
+function agentSetting(): AgentSetting {
+  const value = vscode.workspace.getConfiguration('handback').get<unknown>('agent')
+  return AGENT_SETTINGS.find(setting => setting === value) ?? 'any'
 }
 
 function deliveryMode(): DeliveryMode {

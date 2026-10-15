@@ -253,6 +253,21 @@
     "configuration": {
       "title": "Handback",
       "properties": {
+        "handback.agent": {
+          "type": "string",
+          "enum": [
+            "any",
+            "claudeCode",
+            "copilotChat"
+          ],
+          "enumDescriptions": [
+            "Offer every chat that can take the review: Claude Code sessions running the Handback mod, and Copilot Chat once Copilot is signed in.",
+            "Only Claude Code sessions running the Handback mod.",
+            "Only Copilot Chat."
+          ],
+          "default": "any",
+          "description": "Which chats Submit review sends to."
+        },
         "handback.delivery": {
           "type": "string",
           "enum": [

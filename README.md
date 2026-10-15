@@ -49,7 +49,7 @@ Select lines (or put the cursor on one), right-click and choose **Suggest a chan
 
 ### Which chat gets it
 
-The candidates are the Claude Code sessions running the mod whose project holds the commented files, and Copilot Chat once you are signed in to Copilot. With one, the review goes straight there. With several, Submit asks which one: Claude Code sessions are listed by when they started and when you last messaged them (and by their title, if you renamed them), the most recent first; Claude Code and Copilot Chat come in the order you last sent to them, so Enter picks the chat you were just talking to. If no chat takes the review, you can copy it and paste it into the chat yourself.
+The candidates are the Claude Code sessions running the mod whose project holds the commented files, and Copilot Chat once you are signed in to Copilot. With one, the review goes straight there. With several, Submit asks which one: Claude Code sessions are listed by when they started and when you last messaged them (and by their title, if you renamed them), the most recent first; Claude Code and Copilot Chat come in the order you last sent to them, so Enter picks the chat you were just talking to. To skip the question, set `handback.agent` to the one you use. If no chat takes the review, you can copy it and paste it into the chat yourself.
 
 Copilot Chat takes the review in whatever mode you left it in: switch it to Agent for Copilot to change the code.
 
@@ -57,6 +57,7 @@ Copilot Chat takes the review in whatever mode you left it in: switch it to Agen
 
 | Setting             | Default |                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handback.agent`    | `any`   | Which chats Submit offers: `any` for every one that can take the review, `claudeCode` or `copilotChat` for only that one.                                                                                                                                                                                                                                       |
 | `handback.delivery` | `send`  | `send` sends the review as your next message. `fill` puts it in the prompt box for you to add to and send yourself. Claude Code's VS Code chat draws its own prompt box, which only a paste can fill: there the review lands on your clipboard and the Claude Code input gets the focus. In Copilot Chat both replace whatever you had typed in its prompt box. |
 
 ## Development
