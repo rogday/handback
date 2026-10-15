@@ -1,30 +1,29 @@
 # Handback
 
-Review Claude's work the way you review a pull request on GitHub: comment on lines in VS Code, finish the review, and it reaches the open Claude Code chat as one message with every comment, its file, its lines and the code around them.
+Review an AI's work the way you review a pull request on GitHub: comment on lines in VS Code, finish the review, and it reaches the open Claude Code or Copilot Chat as one message with every comment, its file, its lines and the code around them.
 
 ## Install
 
-It takes two pieces, the VS Code extension and a Claude Code mod:
+Install **Handback** from the VS Code Marketplace. That is all Copilot Chat needs. Claude Code takes a second piece, a mod:
 
-1. Install **Handback** from the VS Code Marketplace.
-2. In a Claude Code session in a terminal, type:
+In a Claude Code session in a terminal, type:
 
-   ```
-   /plugin install handback --marketplace rogday/handback
-   ```
+```
+/plugin install handback --marketplace rogday/handback
+```
 
-   Answer `y` to add the marketplace, then press Enter to install for your user. The mod runs in every Claude Code session from then on, the VS Code chat included.
+Answer `y` to add the marketplace, then press Enter to install for your user. The mod runs in every Claude Code session from then on, the VS Code chat included.
 
 The mod is a Claude Code function-hooks plugin, built against Claude Code 2.1.295.
 
 ## How it works
 
-It comes in two halves:
+For Claude Code it comes in two halves:
 
 - **The VS Code extension** draws the review: comment threads in the gutter, pending comments, the "Finish your review" box.
 - **The Claude Code mod** runs inside each Claude Code session and hands the finished review to that session as your next message.
 
-They talk through files under `~/.claude/handback/`; see [docs/architecture.md](docs/architecture.md).
+They talk through files under `~/.claude/handback/`; see [docs/architecture.md](docs/architecture.md). Copilot Chat runs in the VS Code window itself, so the extension hands it the review directly.
 
 ## Reviewing
 
@@ -48,15 +47,17 @@ You can comment on other versions of a file too: a commit opened from the Source
 
 Select lines (or put the cursor on one), right-click and choose **Suggest a change**. A comment opens on them holding a `suggestion` block with their code, as GitHub's "Add a suggestion" does: edit it into what the lines should be, add words around it if you like, and **Start a review** or **Add single comment**. Claude is told the block replaces the commented lines.
 
-### Which Claude Code session gets it
+### Which chat gets it
 
-Only sessions whose project holds the commented files are candidates. With one, the review goes straight there. With several, Submit asks which one: each is listed by when it started and when you last messaged it (and by its title, if you renamed it), the most recent first, so Enter picks the chat you were just talking to. If no session takes the review, you can copy it and paste it into the chat yourself.
+The candidates are the Claude Code sessions running the mod whose project holds the commented files, and Copilot Chat once you are signed in to Copilot. With one, the review goes straight there. With several, Submit asks which one: Claude Code sessions are listed by when they started and when you last messaged them (and by their title, if you renamed them), the most recent first; Claude Code and Copilot Chat come in the order you last sent to them, so Enter picks the chat you were just talking to. If no chat takes the review, you can copy it and paste it into the chat yourself.
+
+Copilot Chat takes the review in whatever mode you left it in: switch it to Agent for Copilot to change the code.
 
 ## Settings
 
-| Setting             | Default |                                                                                                                                                                                                                                                                                |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `handback.delivery` | `send`  | `send` sends the review as your next message. `fill` puts it in the prompt box for you to add to and send yourself. The VS Code chat draws its own prompt box, which only a paste can fill: there the review lands on your clipboard and the Claude Code input gets the focus. |
+| Setting             | Default |                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handback.delivery` | `send`  | `send` sends the review as your next message. `fill` puts it in the prompt box for you to add to and send yourself. Claude Code's VS Code chat draws its own prompt box, which only a paste can fill: there the review lands on your clipboard and the Claude Code input gets the focus. In Copilot Chat both replace whatever you had typed in its prompt box. |
 
 ## Development
 

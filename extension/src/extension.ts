@@ -5,7 +5,7 @@ import * as vscode from 'vscode'
 import { FinishReviewPicker } from './finishPicker.ts'
 import { formatComment, formatReview, suggestionBlock, type Verdict } from './format.ts'
 import { PendingReview, ReviewComment, parseSavedThreads } from './review.ts'
-import { send } from './send.ts'
+import { ReviewSender } from './send.ts'
 import { fileVersionOf, reviewedThreads, selectedLines, snapshotOf, threadFileVersion } from './threads.ts'
 
 const CONTROLLER_ID = 'handback'
@@ -22,10 +22,11 @@ export function activate(context: vscode.ExtensionContext): void {
   controller.options = { prompt: 'Leave a comment', placeHolder: 'Leave a comment' }
 
   const review = new PendingReview()
+  const sender = new ReviewSender(context.globalState)
   const finishButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, FINISH_BUTTON_PRIORITY)
   finishButton.command = 'handback.finishReview'
   const picker = new FinishReviewPicker(context.globalState, {
-    submit: ({ verdict, summary }) => finishReview(review, verdict, summary),
+    submit: ({ verdict, summary }) => finishReview(review, sender, verdict, summary),
     discard: () => discardReview(review),
   })
   review.onDidChange(() => {
@@ -42,7 +43,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   const addSingleComment = async (reply: vscode.CommentReply) => {
     const thread = review.addComment(reply, await author, await snapshotOf(reply.thread))
-    if (thread !== undefined) await sendSingleComment(review, thread)
+    if (thread !== undefined) await sendSingleComment(review, sender, thread)
   }
   const suggestChange = async () => {
     const editor = vscode.window.activeTextEditor
@@ -55,7 +56,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   const sendDraft = async (comment: ReviewComment) => {
     const thread = review.addDraft(comment, await snapshotOf(comment.thread))
-    if (thread !== undefined) await sendSingleComment(review, thread)
+    if (thread !== undefined) await sendSingleComment(review, sender, thread)
   }
 
   context.subscriptions.push(
@@ -95,7 +96,12 @@ function showPendingCount(count: number, finishButton: vscode.StatusBarItem): vo
   else finishButton.hide()
 }
 
-async function finishReview(review: PendingReview, verdict: Verdict, summary: string): Promise<boolean> {
+async function finishReview(
+  review: PendingReview,
+  sender: ReviewSender,
+  verdict: Verdict,
+  summary: string,
+): Promise<boolean> {
   // An approval alone says something; an empty comment does not.
   if (review.threads.length === 0 && summary.trim() === '' && verdict !== 'approve') {
     void vscode.window.showInformationMessage('Nothing to send: leave a comment on a line or a summary first.')
@@ -103,18 +109,22 @@ async function finishReview(review: PendingReview, verdict: Verdict, summary: st
   }
   const threads = await reviewedThreads(review.entries)
   const paths = review.threads.map(thread => threadFileVersion(thread).file.fsPath)
-  const isSent = await send(formatReview({ verdict, summary, threads }), paths)
+  const isSent = await sender.send(formatReview({ verdict, summary, threads }), paths)
   if (isSent) review.clear()
   return isSent
 }
 
 /** Sends one thread at once; if it cannot be sent, it stays in the review as a pending comment. */
-async function sendSingleComment(review: PendingReview, thread: vscode.CommentThread): Promise<void> {
+async function sendSingleComment(
+  review: PendingReview,
+  sender: ReviewSender,
+  thread: vscode.CommentThread,
+): Promise<void> {
   const entry = review.entryOf(thread)
   if (entry === undefined) return
   const [reviewed] = await reviewedThreads([entry])
   if (reviewed === undefined) return
-  const isSent = await send(formatComment(reviewed), [threadFileVersion(thread).file.fsPath])
+  const isSent = await sender.send(formatComment(reviewed), [threadFileVersion(thread).file.fsPath])
   if (isSent) review.removeThread(thread)
 }
 

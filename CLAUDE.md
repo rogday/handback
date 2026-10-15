@@ -1,6 +1,6 @@
 # handback
 
-GitHub-style code review for Claude Code: leave review comments on lines in VS Code, finish the review, and it lands in the open Claude Code chat as one message.
+GitHub-style code review for Claude Code and Copilot Chat: leave review comments on lines in VS Code, finish the review, and it lands in the open chat as one message.
 
 Two halves that talk through files under `~/.claude/handback/`:
 

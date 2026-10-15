@@ -1,7 +1,7 @@
 {
   "name": "handback",
   "displayName": "Handback",
-  "description": "GitHub-style code review for Claude Code: comment on lines, finish the review, and it lands in the open Claude Code chat.",
+  "description": "GitHub-style code review for Claude Code and Copilot Chat: comment on lines, finish the review, and it lands in the open chat.",
   "version": "0.1.0",
   "publisher": "rogday",
   "license": "MIT",
@@ -17,6 +17,7 @@
   "keywords": [
     "claude",
     "claude code",
+    "copilot",
     "code review",
     "review comments",
     "pull request",
@@ -263,7 +264,7 @@
             "Put the review in the prompt box, for you to add to and send yourself."
           ],
           "default": "send",
-          "description": "What Submit review does with the review in Claude Code."
+          "description": "What Submit review does with the review in the chat."
         }
       }
     }

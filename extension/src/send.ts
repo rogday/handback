@@ -1,7 +1,8 @@
-// Hands a finished review to the Claude Code session the person picks, and tells them how it went.
+// Hands a finished review to the chat the person picks, and tells them how it went.
 
 import * as vscode from 'vscode'
 import { PROTOCOL_VERSION, isDeliveryMode, type DeliveryMode, type SessionRecord } from '../../plugin/hooks/protocol.ts'
+import { isCopilotChatReady, sendToCopilotChat } from './copilotChat.ts'
 import { deliver, sessionsFor, type DeliveryResult } from './delivery.ts'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 4_000
@@ -11,88 +12,151 @@ const CLAUDE_FOCUS_INPUT = 'claude-vscode.focus'
 const PASTE_KEY = process.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'
 const COPY_REVIEW = 'Copy review'
 const INSTALL_MOD = 'Install the mod'
+const LAST_AGENT_KEY = 'handback.lastAgent'
 
-// Set while a review is on its way, so pressing Finish again then cannot send it twice. Released before anything
-// waits on the person: VS Code keeps an unanswered notification pending, which would hold every later send.
-let isSending = false
+const AGENTS = ['claudeCode', 'copilotChat'] as const
+type Agent = (typeof AGENTS)[number]
+/** Comes first in the picker until the person sends a review anywhere. */
+const FIRST_AGENT: Agent = 'claudeCode'
+const AGENT_NAMES: Record<Agent, string> = { claudeCode: 'Claude Code', copilotChat: 'Copilot Chat' }
+
+/** Where a review can go: a Claude Code session running the mod, or this window's Copilot Chat. */
+type Target = { agent: 'claudeCode'; session: SessionRecord } | { agent: 'copilotChat' }
 
 /** How far a send got before anything more is asked of the person. */
 type Attempt =
-  | { outcome: 'noSession' }
+  | { outcome: 'noTarget' }
   | { outcome: 'otherProtocol'; isModOlder: boolean }
   | { outcome: 'notPicked' }
-  | { outcome: DeliveryResult; session: SessionRecord }
+  | { outcome: 'copilotChatRefused'; reason: string }
+  | { outcome: DeliveryResult; target: Target }
 
-/** Sends the review to a session the person picks; true once it is out of the editor's hands. */
-export async function send(text: string, paths: readonly string[]): Promise<boolean> {
-  if (isSending) {
-    void vscode.window.showInformationMessage('A review is already on its way to Claude.')
-    return false
+type TargetItem = vscode.QuickPickItem & { target?: Target }
+
+export class ReviewSender {
+  readonly #memento: vscode.Memento
+  // Set while a review is on its way, so pressing Finish again then cannot send it twice. Released before anything
+  // waits on the person: VS Code keeps an unanswered notification pending, which would hold every later send.
+  #isSending = false
+
+  constructor(memento: vscode.Memento) {
+    this.#memento = memento
   }
-  isSending = true
-  let attempt: Attempt
-  try {
-    attempt = await attemptDelivery(text, paths)
-  } finally {
-    isSending = false
+
+  /** Sends the review to a chat the person picks; true once it is out of the editor's hands. */
+  async send(text: string, paths: readonly string[]): Promise<boolean> {
+    if (this.#isSending) {
+      void vscode.window.showInformationMessage('A review is already on its way.')
+      return false
+    }
+    this.#isSending = true
+    let attempt: Attempt
+    try {
+      attempt = await this.#attemptDelivery(text, paths)
+    } finally {
+      this.#isSending = false
+    }
+    return settle(attempt, text)
   }
-  return settle(attempt, text)
+
+  async #attemptDelivery(text: string, paths: readonly string[]): Promise<Attempt> {
+    const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
+    const [candidates, isCopilotReady] = await Promise.all([
+      sessionsFor(paths.length > 0 ? paths : workspacePaths),
+      isCopilotChatReady(),
+    ])
+    const sessions = candidates.filter(session => session.protocol === PROTOCOL_VERSION)
+    const [other] = candidates.filter(session => session.protocol !== PROTOCOL_VERSION)
+    // Said even when Copilot Chat could take the review: someone running the mod meant it for Claude Code.
+    if (sessions.length === 0 && other !== undefined) {
+      return { outcome: 'otherProtocol', isModOlder: other.protocol < PROTOCOL_VERSION }
+    }
+    const targets: Target[] = sessions.map(session => ({ agent: 'claudeCode', session }))
+    if (isCopilotReady) targets.push({ agent: 'copilotChat' })
+    if (targets.length === 0) return { outcome: 'noTarget' }
+
+    const target = await pickTarget(targets, this.#lastAgent())
+    if (target === undefined) return { outcome: 'notPicked' }
+    await this.#memento.update(LAST_AGENT_KEY, target.agent)
+    return target.agent === 'copilotChat' ? deliverToCopilotChat(text) : deliverToClaudeCode(target, text)
+  }
+
+  #lastAgent(): Agent {
+    const saved = this.#memento.get<unknown>(LAST_AGENT_KEY)
+    return AGENTS.find(agent => agent === saved) ?? FIRST_AGENT
+  }
 }
 
-async function attemptDelivery(text: string, paths: readonly string[]): Promise<Attempt> {
-  const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-  const candidates = await sessionsFor(paths.length > 0 ? paths : workspacePaths)
-  const sessions = candidates.filter(session => session.protocol === PROTOCOL_VERSION)
-  const [other] = candidates.filter(session => session.protocol !== PROTOCOL_VERSION)
-  if (sessions.length === 0 && other !== undefined) {
-    return { outcome: 'otherProtocol', isModOlder: other.protocol < PROTOCOL_VERSION }
-  }
-  if (sessions.length === 0) return { outcome: 'noSession' }
-  const session = await pickSession(sessions)
-  if (session === undefined) return { outcome: 'notPicked' }
+async function deliverToClaudeCode(target: Target & { agent: 'claudeCode' }, text: string): Promise<Attempt> {
+  const progress = { location: vscode.ProgressLocation.Window, title: 'Sending the review to Claude Code' }
+  const result = await vscode.window.withProgress(progress, () => deliver(target.session.id, text, deliveryMode()))
+  return { outcome: result, target }
+}
 
-  const progress = { location: vscode.ProgressLocation.Window, title: 'Sending the review to Claude' }
-  const result = await vscode.window.withProgress(progress, () => deliver(session.id, text, deliveryMode()))
-  return { outcome: result, session }
+async function deliverToCopilotChat(text: string): Promise<Attempt> {
+  const mode = deliveryMode()
+  const progress = { location: vscode.ProgressLocation.Window, title: 'Sending the review to Copilot Chat' }
+  try {
+    await vscode.window.withProgress(progress, () => sendToCopilotChat(text, mode))
+  } catch (error) {
+    return { outcome: 'copilotChatRefused', reason: error instanceof Error ? error.message : String(error) }
+  }
+  return { outcome: mode === 'send' ? 'submitted' : 'filled', target: { agent: 'copilotChat' } }
 }
 
 async function settle(attempt: Attempt, text: string): Promise<boolean> {
-  if (attempt.outcome === 'noSession') {
-    return offerCopy(text, 'No Claude Code session running the Handback mod is open on this workspace.')
+  if (attempt.outcome === 'noTarget') {
+    return offerCopyOrMod(
+      text,
+      'No chat can take the review: no Claude Code session running the Handback mod is open on this workspace, and Copilot is not signed in.',
+    )
   }
   if (attempt.outcome === 'otherProtocol') {
     const update = attempt.isModOlder
       ? 'runs an older Handback mod: update it with `claude plugin update handback`'
       : 'runs a newer Handback mod than this extension: update the extension'
-    return offerCopy(text, `The Claude Code session on this workspace ${update}.`)
+    return offerCopyOrMod(text, `The Claude Code session on this workspace ${update}.`)
+  }
+  if (attempt.outcome === 'copilotChatRefused') {
+    return offerCopy(text, `Copilot Chat did not take the review: ${attempt.reason}`)
   }
   if (attempt.outcome === 'notPicked') return false
-  return reportDelivery(attempt.outcome, text, attempt.session)
+  return reportDelivery(attempt.outcome, text, attempt.target)
 }
 
 /**
- * Asks only when there is a choice. Claude Code hands mods a session's title only once the person renamed it, so a
- * session is told apart by when it started and when it was last messaged.
+ * Asks only when there is a choice, the agent sent to last first. Claude Code hands mods a session's title only once
+ * the person renamed it, so a session is told apart by when it started and when it was last messaged.
  */
-async function pickSession(sessions: readonly SessionRecord[]): Promise<SessionRecord | undefined> {
-  if (sessions.length === 1) return sessions[0]
+async function pickTarget(targets: readonly Target[], lastAgent: Agent): Promise<Target | undefined> {
+  if (targets.length === 1) return targets[0]
   const now = Date.now()
-  const items = sessions.map(session => {
-    const started = `started ${startTime(session.startedAt, now)}`
-    const lastMessage =
-      session.lastPromptAt === undefined ? 'no messages yet' : `last message ${timeAgo(session.lastPromptAt, now)}`
-    return {
-      label: session.title ?? `Session ${started}`,
-      description: session.title === undefined ? lastMessage : `${started} · ${lastMessage}`,
-      detail: session.root,
-      session,
-    }
+  const agents = [lastAgent, ...AGENTS.filter(agent => agent !== lastAgent)]
+  const items = agents.flatMap(agent => {
+    const ofAgent = targets.filter(target => target.agent === agent)
+    if (ofAgent.length === 0) return []
+    const separator: TargetItem = { label: AGENT_NAMES[agent], kind: vscode.QuickPickItemKind.Separator }
+    return [separator, ...ofAgent.map(target => targetItem(target, now))]
   })
   const picked = await vscode.window.showQuickPick(items, {
-    title: 'Send the review to which Claude Code session?',
+    title: 'Send the review to which chat?',
     placeHolder: 'The one you messaged last comes first',
   })
-  return picked?.session
+  return picked?.target
+}
+
+function targetItem(target: Target, now: number): TargetItem {
+  if (target.agent === 'copilotChat') return { label: AGENT_NAMES.copilotChat, description: 'this window', target }
+  const { session } = target
+  const started = `started ${startTime(session.startedAt, now)}`
+  const lastMessage =
+    session.lastPromptAt === undefined ? 'no messages yet' : `last message ${timeAgo(session.lastPromptAt, now)}`
+  return {
+    label: session.title ?? `Session ${started}`,
+    description: session.title === undefined ? lastMessage : `${started} · ${lastMessage}`,
+    detail: session.root,
+    target,
+  }
 }
 
 const clockTime = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
@@ -123,13 +187,14 @@ function timeAgo(time: number, now: number): string {
   return relativeTime.format(-Math.floor(elapsed / unitMs), name)
 }
 
-async function reportDelivery(result: DeliveryResult, text: string, session: SessionRecord): Promise<boolean> {
+async function reportDelivery(result: DeliveryResult, text: string, target: Target): Promise<boolean> {
+  const name = AGENT_NAMES[target.agent]
   switch (result) {
     case 'submitted':
-      vscode.window.setStatusBarMessage('$(check) Review sent to Claude', STATUS_MESSAGE_TIMEOUT_MS)
+      vscode.window.setStatusBarMessage(`$(check) Review sent to ${name}`, STATUS_MESSAGE_TIMEOUT_MS)
       return true
     case 'filled':
-      vscode.window.setStatusBarMessage('$(check) Review is in the Claude Code prompt box', STATUS_MESSAGE_TIMEOUT_MS)
+      vscode.window.setStatusBarMessage(`$(check) Review is in the ${name} prompt box`, STATUS_MESSAGE_TIMEOUT_MS)
       return true
     case 'noPromptBox':
       await handToClaudeChat(text)
@@ -140,8 +205,13 @@ async function reportDelivery(result: DeliveryResult, text: string, session: Ses
       )
       return false
     case 'timedOut':
-      return offerCopy(text, `Claude Code session "${session.title ?? session.id}" did not take the review.`)
+      return offerCopy(text, `${describe(target)} did not take the review.`)
   }
+}
+
+function describe(target: Target): string {
+  if (target.agent === 'copilotChat') return AGENT_NAMES.copilotChat
+  return `Claude Code session "${target.session.title ?? target.session.id}"`
 }
 
 /**
@@ -161,11 +231,20 @@ function deliveryMode(): DeliveryMode {
   return isDeliveryMode(mode) ? mode : 'send'
 }
 
-async function offerCopy(text: string, problem: string): Promise<boolean> {
+/** For a problem the mod would solve: Claude Code sessions take reviews only through it. */
+async function offerCopyOrMod(text: string, problem: string): Promise<boolean> {
   const choice = await vscode.window.showWarningMessage(problem, COPY_REVIEW, INSTALL_MOD)
   if (choice === INSTALL_MOD) void vscode.env.openExternal(vscode.Uri.parse(INSTALL_URL))
-  if (choice !== COPY_REVIEW) return false
+  return choice === COPY_REVIEW ? copyReview(text) : false
+}
+
+async function offerCopy(text: string, problem: string): Promise<boolean> {
+  const choice = await vscode.window.showWarningMessage(problem, COPY_REVIEW)
+  return choice === COPY_REVIEW ? copyReview(text) : false
+}
+
+async function copyReview(text: string): Promise<boolean> {
   await vscode.env.clipboard.writeText(text)
-  vscode.window.setStatusBarMessage('$(check) Review copied: paste it into Claude Code', STATUS_MESSAGE_TIMEOUT_MS)
+  vscode.window.setStatusBarMessage('$(check) Review copied: paste it into the chat', STATUS_MESSAGE_TIMEOUT_MS)
   return true
 }
