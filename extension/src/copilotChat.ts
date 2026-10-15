@@ -15,10 +15,12 @@ export async function isCopilotChatReady(): Promise<boolean> {
 }
 
 /**
- * Resolves once Copilot Chat took the review and rejects with VS Code's reason otherwise. Both modes replace any
- * draft in its prompt box, which nothing outside the chat can read. The chat keeps the mode the person left it in:
- * switching modes may ask to start a new session.
+ * Resolves once Copilot Chat took the review and rejects with VS Code's reason otherwise. Sending leaves the draft in
+ * its prompt box alone (`preserveInput`, VS Code 1.131 and later; earlier ones ignore it and replace the draft).
+ * Filling replaces the draft: nothing outside the chat can read it to append to. The chat keeps the mode the person
+ * left it in: switching modes may ask to start a new session.
  */
 export async function sendToCopilotChat(text: string, mode: DeliveryMode): Promise<void> {
-  await vscode.commands.executeCommand(OPEN_CHAT, { query: text, isPartialQuery: mode === 'fill' })
+  const isFill = mode === 'fill'
+  await vscode.commands.executeCommand(OPEN_CHAT, { query: text, isPartialQuery: isFill, preserveInput: !isFill })
 }
