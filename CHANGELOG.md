@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Copilot Chat takes reviews too, with no mod: once Copilot is signed in, Submit offers it beside the Claude Code sessions, the chat you sent to last first.
+- `handback.agent` sends to Claude Code or Copilot Chat only, without asking.
+
 ## 0.1.0
 
 First release.

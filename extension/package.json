@@ -2,7 +2,7 @@
   "name": "handback",
   "displayName": "Handback",
   "description": "GitHub-style code review for Claude Code and Copilot Chat: comment on lines, finish the review, and it lands in the open chat.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "rogday",
   "license": "MIT",
   "icon": "icon.png",

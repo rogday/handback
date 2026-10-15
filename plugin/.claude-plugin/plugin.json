@@ -1,6 +1,6 @@
 {
   "name": "handback",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Delivers reviews finished in the Handback VS Code extension to this Claude Code session.",
   "author": { "name": "rogday" },
   "homepage": "https://github.com/rogday/handback",
