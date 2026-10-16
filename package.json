@@ -22,12 +22,12 @@
     "verify": "npm run format:check && npm run lint && npm run check && npm test && npm run plugin:check"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "2.1.295",
+    "@anthropic-ai/claude-code": "2.1.296",
     "@eslint/js": "10.0.1",
     "eslint": "10.12.0",
     "globals": "17.13.0",
-    "prettier": "3.9.9",
+    "prettier": "3.9.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.1"
+    "typescript-eslint": "8.71.2"
   }
 }
